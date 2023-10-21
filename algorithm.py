@@ -85,9 +85,8 @@ def pre_encrypt(input_file, key):
     # Separate the file name and extension
     base_name, file_extension = input_file.rsplit('.', 1)
     # Generate a timestamp
-    timestamp = datetime.datetime.now().strftime("%H%M%S-%d%m%y")
     # Append e (encrypted) and timestamp to the file name
-    output_file = f"{base_name}-e-{timestamp}.{file_extension}"   
+    output_file = f"{base_name}.{file_extension}.enc"   
     # calling the encrypt function
     encrypt_file(input_file, output_file, key) 
   
@@ -96,15 +95,14 @@ def pre_decrypt(input_file, key):
     # Separate the file name and extension
     base_name, file_extension = input_file.rsplit('.', 1)
     # Generate a timestamp
-    timestamp = datetime.datetime.now().strftime("%H%M%S-%d%m%y")
     # Append d (encrypted) and timestamp to the file name
-    output_file = f"{base_name}-d-{timestamp}.{file_extension}"   
+    output_file = f"{base_name}.{file_extension}"   
     # calling the decrypt function
     decrypt_file(input_file, output_file, key) 
 
 # function to encrypt
 def encrypt_file(input_file, output_file, key):
-    rc4 = ARC4.new(key)
+    rc4 = ARC4.new(key.encode('ASCII'))
     with open(input_file, 'rb') as infile, open(output_file, 'wb') as outfile:
         while True:
             chunk = infile.read(1024)
@@ -115,8 +113,13 @@ def encrypt_file(input_file, output_file, key):
 
 # function to decrypt
 def decrypt_file(input_file, output_file, key):
-    rc4 = ARC4.new(key)
-    with open(input_file, 'rb') as infile, open(output_file, 'wb') as outfile:
+    rc4 = ARC4.new(key.encode('ASCII'))
+    print(input_file)
+    print(output_file)
+    newFileDir = os.getcwd() + '/decrypt/' + 'temp'
+
+    print(newFileDir)
+    with open(input_file, 'rb') as infile, open(newFileDir, 'wb') as outfile:
         while True:
             chunk = infile.read(1024)
             if not chunk:

@@ -89,6 +89,7 @@ def RC4Handler() -> json:
         f.close()
         pre_encrypt(filePath, key)
         print(filePath)
+        os.remove(filePath)
         return jsonify(
             {
                 "message": "success!"
