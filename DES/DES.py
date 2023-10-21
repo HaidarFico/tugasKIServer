@@ -5,20 +5,21 @@ from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.padding import PKCS7
+from cryptography.hazmat.primitives import padding
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
-# Configure database connection
+# database connection
 database = psycopg2.connect(
 
 )
 
+# encryption parameters
+SECRET_KEY = os.urandom(24)  
+ENCRYPTION_KEY = os.urandom(24)  
 
-# Configure encryption parameters
-SECRET_KEY = os.urandom(24)  # Store this securely
-ENCRYPTION_KEY = os.urandom(24)  # Use a secure key for encryption
-
-# Directory to store uploaded files
+# directory to store uploaded files
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -29,9 +30,25 @@ def create_user():
         email = request.form.get('email')
         password = request.form.get('password')
 
-        # Create a new user in userss
+        # generate an Initialization Vector (IV) for this user
+        iv = os.urandom(8) 
+
+        backend = default_backend()
+
+        # create an encryptor for each data
+        username_encryptor = create_encryptor(ENCRYPTION_KEY, iv, backend)
+        email_encryptor = create_encryptor(ENCRYPTION_KEY, iv, backend)
+        password_encryptor = create_encryptor(ENCRYPTION_KEY, iv, backend)
+
+        # encrypt each data
+        encrypted_username = encrypt_data(username, username_encryptor)
+        encrypted_email = encrypt_data(email, email_encryptor)
+        encrypted_password = encrypt_data(password, password_encryptor)
+
+        # insert data into the userss table
         cursor = database.cursor()
-        cursor.execute("INSERT INTO userss (username, email, password) VALUES (%s, %s, %s) RETURNING user_id", (username, email, password))
+        cursor.execute("INSERT INTO userss (username, email, password, registration_date, iv) VALUES (%s, %s, %s, %s, %s) RETURNING user_id",
+                       (encrypted_username, encrypted_email, encrypted_password, datetime.now(), iv))
         new_user_id = cursor.fetchone()[0]
         database.commit()
         cursor.close()
@@ -41,20 +58,37 @@ def create_user():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+# function for encryptor
+def create_encryptor(key, iv, backend):
+    cipher = Cipher(algorithms.TripleDES(key), modes.CBC(iv), backend=backend)
+    return cipher.encryptor()
+
+# function for decryptor
+def encrypt_data(data, encryptor):
+    padder = padding.PKCS7(64).padder()
+    padded_data = padder.update(data.encode('utf-8')) + padder.finalize()
+    return encryptor.update(padded_data) + encryptor.finalize()
+
+# files extensions
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'doc', 'xls', 'jpg', 'png', 'mp4', 'avi', 'jpeg', 'docx'}
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     user_id = request.form.get('user_id')
     file = request.files['file']
 
-    if file:
+    if file and allowed_file(file.filename):
         try:
-            # Store the file
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{user_id}_file.txt')
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{user_id}_{filename}')
             file.save(file_path)
 
-            iv = os.urandom(8) 
+            iv = os.urandom(8)
 
-            # Create a Cipher object for DES in CBC mode with the IV
+            # create a cipher object for DES in CBC mode with the IV
             cipher = Cipher(algorithms.TripleDES(ENCRYPTION_KEY), modes.CBC(iv), backend=default_backend())
             encryptor = cipher.encryptor()
 
@@ -67,29 +101,28 @@ def upload_file():
             # Encrypt the padded file data
             encrypted_file_data = encryptor.update(padded_file_data) + encryptor.finalize()
 
-            # Store the encrypted data in a text file
-            encrypted_file_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{user_id}_encrypted_file.txt')
+            # Store the encrypted data in a file
+            encrypted_file_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{user_id}_{filename}.enc')
             with open(encrypted_file_path, 'wb') as encrypted_file:
                 encrypted_file.write(encrypted_file_data)
 
             cursor = database.cursor()
             cursor.execute("UPDATE userss SET file_name = %s, file_data = %s, iv = %s WHERE user_id = %s",
-                           ('file', encrypted_file_data, iv, user_id))
+                           (filename, encrypted_file_data, iv, user_id))
             database.commit()
             cursor.close()
 
             return jsonify({"message": "File uploaded and encrypted successfully."})
         except Exception as e:
             return jsonify({"error": str(e)})
-    return jsonify({"error": "No File file provided."})
+    return jsonify({"error": "Invalid or unsupported file format."})
 
 
-@app.route('/get_decrypted/<user_id>', methods=['GET'])
-def get_decrypted(user_id):
+@app.route('/get_decrypted/<user_id>/<filename>', methods=['GET'])
+def get_decrypted(user_id, filename):
     try:
-        # Retrieve the encrypted file data and IV from the database based on user_id
         cursor = database.cursor()
-        cursor.execute("SELECT file_data, iv FROM userss WHERE user_id = %s", (user_id,))
+        cursor.execute("SELECT file_data, iv FROM userss WHERE user_id = %s AND file_name = %s", (user_id, filename))
         result = cursor.fetchone()
         cursor.close()
 
@@ -106,13 +139,12 @@ def get_decrypted(user_id):
 
             # Create a response with the decrypted data
             response = Response(unpadded_data)
+            response.headers["Content-Disposition"] = f"attachment; filename={filename}"
             return response
 
         return jsonify({"error": "File not found for the given user."})
-
     except Exception as e:
         return jsonify({"error": str(e)})
-
 
 
 if __name__ == '__main__':
