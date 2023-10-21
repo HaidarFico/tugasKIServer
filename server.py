@@ -2,15 +2,13 @@ from flask import Flask, json, jsonify, request, send_file, render_template, url
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
 from flask_sqlalchemy import SQLAlchemy
-# from sqlalchemy import create_engine
+from sqlalchemy import Column, Integer, ForeignKey, MetaData, String
 # from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
-from flask_wtf import FlaskForm
 from algorithm import *
-from wtforms import StringField, PasswordField, SubmitField
-from wtforms.validators import InputRequired, Length, ValidationError
 from flask_bcrypt import Bcrypt
 from sqlalchemy.sql import func
-
+from form import *
+import json
 
 api = Flask(__name__)
         
@@ -21,13 +19,18 @@ api.config['MYSQL_DB'] = 'KI'
 api.config['MYSQL_PORT'] = 3306
 # mysql = MySQL(api)
 bcrypt = Bcrypt(api)
-SECRET_KEY = os.urandom(24)  # Store this securely
-ENCRYPTION_KEY = os.urandom(24)  # Use a secure key for encryption
+SECRET_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAA'  # Store this securely
+ENCRYPTION_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAA'  # Use a secure key for encryption
+IV = 'MKLOPOOO'
+
+
 api.config['UPLOAD_FOLDER'] = 'uploads'
 api.config['SECRET_KEY'] = SECRET_KEY
 api.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:change-me@127.0.0.1:3306/KI'
-
+print(SECRET_KEY)
+print(IV)
 db = SQLAlchemy(api)
+metadata_obj = MetaData()
 login_manager = LoginManager()
 login_manager.init_app(api)
 login_manager.login_view = 'login'
@@ -42,20 +45,27 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
+# user = db.Table(
+#     "user",
+#     Column('id', Integer, primary_key=True, autoincrement=True),
+#     Column('username', String(20), unique=True),
+#     Column('password', String(80), unique=True)
+# )
 
-class RegisterForm(FlaskForm):
-    username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "username"})
-    password = PasswordField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "password"})
-    submit = SubmitField('Register')
+files = db.Table(
+    "files",
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('user_id', Integer, ForeignKey("user.id"), nullable=False),
+    Column('filename', String(50), nullable=False)
+)
 
-    # def validate_username(self, username):
-    #     print('temp')
-
-    #     # existing_user_username = 
-class LoginForm(FlaskForm):
-    username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "username"})
-    password = PasswordField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "password"})
-    submit = SubmitField('Login')
+privateData = db.Table(
+    "private_data",
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('data_name', String(50), nullable=True),
+    Column('user_id', Integer, ForeignKey("user.id"), nullable=False),
+    Column('data', String(50), nullable=True)
+)
 
 
 @api.route('/', methods=['GET'])
@@ -77,13 +87,6 @@ def login():
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        # hashed_password = bcrypt.generate_password_hash(form.password.data)
-        # cur = mysql.connection.cursor()
-        # queryString = f"INSERT INTO user (username, password) VALUES ('{form.username.data}', '{hashed_password.decode('ASCII')}')"
-        # print(queryString)
-        # cur.execute(queryString)
-        # # cur.commit()
-        # mysql.connection.commit()
         hashed_password = bcrypt.generate_password_hash(form.password.data)
         # return redirect(url_for('login'))
         new_user = User(username=form.username.data, password=hashed_password)
@@ -96,7 +99,27 @@ def register():
 @api.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    return render_template('dashboard.html')
+    print(current_user.get_id())
+    privateDataForm= PrivateDataForm()
+    fileUploadForm= FileUploadForm()
+    if privateDataForm.validate_on_submit():
+        
+        if privateData.select().where(privateData.c.user_id == current_user.get_id()) == None:
+            privateData.insert().values(user_id = current_user.get_id())
+        
+        data = {
+            f'{privateDataForm.data_name.data}' : f'{privateDataForm.data_isi.data}'
+        }
+
+        dataJson = json.dumps(data)
+        print(dataJson)
+        encryptedData = encrypt_data_cbc(dataJson.encode('ASCII'), IV.encode('ASCII'), SECRET_KEY.encode('ASCII'))
+        with open(os.getcwd() + '/private_data/' + current_user.get_id() + '.enc', 'wb') as fo:
+            fo.write(encryptedData.encode('ASCII'))
+        
+        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm)
+
+    return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm)
 
 @api.route('/test', methods=['GET'])
 def test() -> json:

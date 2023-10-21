@@ -7,7 +7,22 @@
 </head>
 <body>
     <h1>DASHBOARD</h1>
-    <a href="{{url_for('login')}}">Login</a><br>
-    <a href="{{url_for('register')}}">Register</a>
+    <h2>Files</h2>
+    <h2>Private Data:</h2>
+    
+    <h2>Upload Files</h2>
+    <form method="post">
+        {{uploadFileForm.hidden_tag()}}
+        {{uploadFileForm.filename}}
+        {{uploadFileForm.file}}
+        {{uploadFileForm.submit}}
+    </form>
+    <h2>Upload Private Data</h2>
+    <form method="post">
+        {{privateDataForm.hidden_tag()}}
+        {{privateDataForm.data_name}}
+        {{privateDataForm.data_isi}}
+        {{privateDataForm.submit}}
+    </form>
 </body>
 </html>

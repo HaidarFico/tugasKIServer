@@ -19,5 +19,5 @@ class FileUploadForm(FlaskForm):
     
 class PrivateDataForm(FlaskForm):
     data_name = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "data_name"})
-    data = PasswordField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "data"})
+    data_isi = PasswordField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "data"})
     submit = SubmitField('Login')
