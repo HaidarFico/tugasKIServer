@@ -5,4 +5,4 @@ if __name__ == '__main__':
     # test = AESEncryptor("hiopmnbvcxzasdfg")
     # test.encrypt_file('test.txt')
     # test.decrypt_file('test.txt.enc')
-    api.run()
+    api.run(debug=True)

@@ -1,6 +1,7 @@
-from wtforms import StringField, PasswordField, SubmitField, FileField
+from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import InputRequired, Length, ValidationError
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileField
 
 class RegisterForm(FlaskForm):
     username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "username"})
@@ -13,8 +14,8 @@ class LoginForm(FlaskForm):
     submit = SubmitField('Login')
 
 class FileUploadForm(FlaskForm):
-    filename = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "filename"})
-    file = FileField(validators=[InputRequired()], name='file')
+    filename_input = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "filename"})
+    file = FileField(validators=[InputRequired()], name='filefile')
     submit = SubmitField('upload')
     
 class PrivateDataForm(FlaskForm):

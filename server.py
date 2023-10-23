@@ -118,6 +118,17 @@ def dashboard():
             fo.write(encryptedData.encode('ASCII'))
         
         return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm)
+    
+    if fileUploadForm.validate_on_submit():
+        print(fileUploadForm.file.name)
+        # image_data = request.files[fileUploadForm.file.name].save(os.getcwd()+ '/temp/tempdownload')
+        tempFilePath = os.getcwd()+ '/temp/tempdownload'
+        print(os.getcwd()+ '/temp/tempdownload')
+        fileUploadForm.file.data.save(tempFilePath)
+        encryptedFile = encrypt_data_cbc(fileUploadForm.file.data, IV, SECRET_KEY)
+        with open(os.getcwd() + '/files/' + fileUploadForm.filename_input.data + '.enc', 'wb') as fo:
+            fo.write(encrypt_file.encode('ASCII'))
+        files.insert().values(filename=fileUploadForm.filename_input.data, user_id= current_user.get_id())
 
     return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm)
 
