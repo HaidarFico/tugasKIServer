@@ -7,6 +7,11 @@ request here is used to access the form data sent with the request. The username
 - flask <br/>
 Flask is being used as a web framework for this project. for defining API routes and handle HTTP requests and responses.
 - flask-mysqldb
+- flask-login
+- cryptography
+- wtforms
+- flask-wtf
+- flask_sqlalchemy
 
 Algorithm Used:
 1. AES = Block Cipher, 128/192/256 bits key
