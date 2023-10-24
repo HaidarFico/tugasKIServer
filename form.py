@@ -14,11 +14,11 @@ class LoginForm(FlaskForm):
     submit = SubmitField('Login')
 
 class FileUploadForm(FlaskForm):
-    filename_input = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "filename"})
-    file = FileField(validators=[InputRequired()], name='filefile')
+    # filename_input = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "filename"})
+    file = FileField(validators=[InputRequired()] )
     submit = SubmitField('upload')
     
 class PrivateDataForm(FlaskForm):
     data_name = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "data_name"})
     data_isi = PasswordField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "data"})
-    submit = SubmitField('Login')
+    submit = SubmitField('Insert')

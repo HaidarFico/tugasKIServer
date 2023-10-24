@@ -3,11 +3,11 @@ from flask_login import UserMixin, login_user, LoginManager, login_required, log
 from flask_mysqldb import MySQL
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, ForeignKey, MetaData, String
-# from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
 from algorithm import *
 from flask_bcrypt import Bcrypt
 from sqlalchemy.sql import func
 from form import *
+from flask_uploads import configure_uploads, UploadSet, ALL
 import json
 
 api = Flask(__name__)
@@ -35,6 +35,10 @@ login_manager = LoginManager()
 login_manager.init_app(api)
 login_manager.login_view = 'login'
 
+api.config['UPLOADED_FILES_DEST'] = os.getcwd() + '/temp_download'
+# filesUploadSet = UploadSet('files', ALL, os.getcwd() + '/temp_download')
+filesUploadSet = UploadSet('files')
+configure_uploads(api, filesUploadSet)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -134,15 +138,21 @@ def dashboard():
         return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
     
     if fileUploadForm.validate_on_submit():
-        print(fileUploadForm.file.name)
-        # image_data = request.files[fileUploadForm.file.name].save(os.getcwd()+ '/temp/tempdownload')
-        tempFilePath = os.getcwd()+ '/temp/tempdownload'
-        print(os.getcwd()+ '/temp/tempdownload')
-        fileUploadForm.file.data.save(tempFilePath)
-        encryptedFile = encrypt_data_cbc(fileUploadForm.file.data, IV, SECRET_KEY)
-        with open(os.getcwd() + '/files/' + fileUploadForm.filename_input.data + '.enc', 'wb') as fo:
-            fo.write(encrypt_file.encode('utf-8'))
-        files.insert().values(filename=fileUploadForm.filename_input.data, user_id= current_user.get_id())
+        tempFilePath = os.getcwd() + '/temp_download/temp'
+        newFilePathDir = os.getcwd() + '/files/' + current_user.get_id() + '/'
+        newFilePath = newFilePathDir + fileUploadForm.file.data.filename
+
+        if not os.path.exists(newFilePathDir):
+            os.makedirs(newFilePathDir)
+
+        filesUploadSet.save(fileUploadForm.file.data, name="temp")
+        with open(tempFilePath, 'rb') as fo:
+            fileData = fo.read()
+            encrypted_file = encrypt_data_cbc(fileData, IV.encode('utf-8'), SECRET_KEY.encode('utf-8'))
+            with open(newFilePath, 'wb') as fr:
+                fr.write(encrypted_file.encode('utf-8'))
+        os.remove(tempFilePath)
+
         return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
     
 
