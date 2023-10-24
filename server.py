@@ -99,11 +99,19 @@ def register():
 @api.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    print(current_user.get_id())
     privateDataForm= PrivateDataForm()
     fileUploadForm= FileUploadForm()
+    privateDataArr = None
+    privateDataFilePath = os.getcwd() + '/private_data/' + current_user.get_id() + '.enc'
+
+    if os.path.exists(privateDataFilePath):
+        with open(privateDataFilePath, 'rb') as fo:
+            dataEncrypted = fo.read()
+            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), SECRET_KEY.encode('utf-8'))
+            dataArray = json.loads(dataDecrypted)
+            privateDataArr = dataArray.copy()
+
     if privateDataForm.validate_on_submit():
-        
         if privateData.select().where(privateData.c.user_id == current_user.get_id()) == None:
             privateData.insert().values(user_id = current_user.get_id())
         
@@ -111,13 +119,19 @@ def dashboard():
             f'{privateDataForm.data_name.data}' : f'{privateDataForm.data_isi.data}'
         }
 
-        dataJson = json.dumps(data)
-        print(dataJson)
-        encryptedData = encrypt_data_cbc(dataJson.encode('ASCII'), IV.encode('ASCII'), SECRET_KEY.encode('ASCII'))
-        with open(os.getcwd() + '/private_data/' + current_user.get_id() + '.enc', 'wb') as fo:
-            fo.write(encryptedData.encode('ASCII'))
+        dataMerged = None
+        if privateDataArr != None:
+            dataMerged = data | privateDataArr
+        else:
+            dataMerged = data
+
+        privateDataArr = dataMerged
+        dataJson = json.dumps(dataMerged)
+        encryptedData = encrypt_data_cbc(dataJson.encode('utf-8'), IV.encode('utf-8'), SECRET_KEY.encode('utf-8'))
+        with open(privateDataFilePath, 'wb') as fo:
+            fo.write(encryptedData.encode('utf-8'))
         
-        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm)
+        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
     
     if fileUploadForm.validate_on_submit():
         print(fileUploadForm.file.name)
@@ -127,10 +141,12 @@ def dashboard():
         fileUploadForm.file.data.save(tempFilePath)
         encryptedFile = encrypt_data_cbc(fileUploadForm.file.data, IV, SECRET_KEY)
         with open(os.getcwd() + '/files/' + fileUploadForm.filename_input.data + '.enc', 'wb') as fo:
-            fo.write(encrypt_file.encode('ASCII'))
+            fo.write(encrypt_file.encode('utf-8'))
         files.insert().values(filename=fileUploadForm.filename_input.data, user_id= current_user.get_id())
+        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
+    
 
-    return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm)
+    return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
 
 @api.route('/test', methods=['GET'])
 def test() -> json:

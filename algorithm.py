@@ -160,7 +160,6 @@ def decrypt_data_cbc(data, SECRET_KEY):
 
         # Decode base64
         iv_and_data = base64.b64decode(encrypted_data_base64.encode('utf-8'))
-
         # Extract IV and encrypted data
         iv = iv_and_data[:8]
         encrypted_data = iv_and_data[8:]
@@ -175,7 +174,6 @@ def decrypt_data_cbc(data, SECRET_KEY):
         # Remove the padding
         unpadder = PKCS7(64).unpadder()  # Use the same block size (64) as during encryption
         original_data = unpadder.update(decrypted_data) + unpadder.finalize()
-    
         return original_data.decode()
     except Exception as e:
         return {"error": str(e)}
