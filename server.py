@@ -107,13 +107,38 @@ def dashboard():
     fileUploadForm= FileUploadForm()
     privateDataArr = None
     privateDataFilePath = os.getcwd() + '/private_data/' + current_user.get_id() + '.enc'
+    filesArray = None
+    fileDataPathRelative = '/files/' + current_user.get_id() + '/'
+    fileDataPath = os.getcwd() + fileDataPathRelative
+    tempFilePath = os.getcwd() + '/temp_download/temp'
 
+
+    if os.path.exists(fileDataPath):
+        dirList = getAllFiles(fileDataPathRelative)
+        if len(dirList) > 0:
+            filesArray = dirList.copy()
+            
     if os.path.exists(privateDataFilePath):
         with open(privateDataFilePath, 'rb') as fo:
             dataEncrypted = fo.read()
             dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), SECRET_KEY.encode('utf-8'))
             dataArray = json.loads(dataDecrypted)
             privateDataArr = dataArray.copy()
+
+    if request.method == 'POST' and filesArray != None:
+        for filePOSTName in filesArray:
+            if request.form['download'] == filePOSTName:
+                print(request.form['download'])
+                filePathDir = fileDataPath + filePOSTName
+                print('this is filepathdir')
+                print(filePathDir)
+                with open(filePathDir, "rb") as fo:
+                    encryptFile = fo.read()
+                    decryptFile = decrypt_data_cbc(encryptFile.decode(), SECRET_KEY.encode('utf-8'))
+                    print(decryptFile)
+                    with open(tempFilePath, "wb") as fr:
+                        fr.write(decryptFile.encode('utf-8'))
+                return send_file(tempFilePath)
 
     if privateDataForm.validate_on_submit():
         if privateData.select().where(privateData.c.user_id == current_user.get_id()) == None:
@@ -135,7 +160,7 @@ def dashboard():
         with open(privateDataFilePath, 'wb') as fo:
             fo.write(encryptedData.encode('utf-8'))
         
-        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
+        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr, filesArray=filesArray)
     
     if fileUploadForm.validate_on_submit():
         tempFilePath = os.getcwd() + '/temp_download/temp'
@@ -152,11 +177,12 @@ def dashboard():
             with open(newFilePath, 'wb') as fr:
                 fr.write(encrypted_file.encode('utf-8'))
         os.remove(tempFilePath)
+        filesArray.append(fileUploadForm.file.data.filename)
 
-        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
+        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr, filesArray=filesArray)
     
 
-    return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr)
+    return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr, filesArray=filesArray)
 
 @api.route('/test', methods=['GET'])
 def test() -> json:
@@ -255,6 +281,12 @@ def RC4Handler() -> json:
         }
     )
 
+def getAllFiles(relativeFilePath: str):
+    dir_path = os.getcwd()
+    dirs = []
+    for dirName, subDirList, fileList in os.walk(dir_path + '/' + relativeFilePath):
+        dirs.append(fileList)
+    return dirs[0]
 # @api.route('/create_user', methods=['POST'])
 # def create_user():
 #     try:

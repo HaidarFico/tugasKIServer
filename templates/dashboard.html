@@ -8,6 +8,16 @@
 <body>
     <h1>DASHBOARD</h1>
     <h2>Files</h2>
+    {%if filesArray != None%}
+    <form method="post">
+    {%for filename in filesArray%}
+    <ul>
+        {{filename}}
+    </ul>
+    <input type="submit" name="download" value="{{filename}}">
+    {%endfor%}
+    </form>
+    {%endif%}
     <h2>Private Data:</h2>
     <table>
         <th>
