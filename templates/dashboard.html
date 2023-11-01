@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dashboard</title>
+</head>
+<body>
+    <h1>DASHBOARD</h1>
+    <h2>Files</h2>
+    {%if filesArray != None%}
+    <form method="post">
+    {%for filename in filesArray%}
+    <ul>
+        {{filename}}
+    </ul>
+    <input type="submit" name="download" value="{{filename}}">
+    {%endfor%}
+    </form>
+    {%endif%}
+    <h2>Private Data:</h2>
+    <table>
+        <th>
+            <td>Private Data</td>
+            <td>Contents</td>
+        </th>
+        {%if privateDataArr != None%}
+        {%for privateDataKey in privateDataArr%}
+        <tr>
+            <td>
+                {{privateDataKey}}
+                {{privateDataArr[privateDataKey]}}
+            </td>
+        </tr>
+        {%endfor%}
+        {%endif%}
+    </table>
+    <h2>Upload Files</h2>
+    <form method="POST" enctype="multipart/form-data">
+        {{uploadFileForm.hidden_tag()}}
+        <!-- {{uploadFileForm.filename}} -->
+        {{uploadFileForm.file}}
+        {{uploadFileForm.submit}}
+    </form>
+    <h2>Upload Private Data</h2>
+    <form method="post">
+        {{privateDataForm.hidden_tag()}}
+        {{privateDataForm.data_name}}
+        {{privateDataForm.data_isi}}
+        {{privateDataForm.submit}}
+    </form>
+</body>
+</html>
