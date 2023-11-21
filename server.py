@@ -125,7 +125,7 @@ def dashboard():
             dataArray = json.loads(dataDecrypted)
             privateDataArr = dataArray.copy()
 
-    if request.method == 'POST' and filesArray != None:
+    if request.method == 'POST' and filesArray != None and request.form.get('download') != None:
         for filePOSTName in filesArray:
             if request.form['download'] == filePOSTName:
                 print(request.form['download'])
@@ -177,7 +177,11 @@ def dashboard():
             with open(newFilePath, 'wb') as fr:
                 fr.write(encrypted_file.encode('utf-8'))
         os.remove(tempFilePath)
-        filesArray.append(fileUploadForm.file.data.filename)
+        if filesArray is not None:
+            filesArray.append(fileUploadForm.file.data.filename)
+        else:
+            filesArray = [fileUploadForm.file.data.filename]
+            
 
         return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr, filesArray=filesArray)
     
