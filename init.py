@@ -22,7 +22,7 @@ def flaskInit():
 
     api.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER')
     api.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-    api.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('UPLOAD_FOLDER')
+    api.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('SQLALCHEMY_DATABASE_URI')
     db = SQLAlchemy(api)
     metadata_obj = MetaData()
     login_manager = LoginManager()
@@ -33,6 +33,26 @@ def flaskInit():
     api.config['UPLOADED_FILES_DEST'] = os.getenv('UPLOADED_FILES_DEST')
     filesUploadSet = UploadSet('files')
     configure_uploads(api, filesUploadSet)
+
+    PRIVATE_DATA_FOLDER_NAME = os.getenv('PRIVATE_DATA_FOLDER_NAME')
+    TEMP_FILE_FOLDER_NAME = os.getenv('TEMP_FILE_FOLDER_NAME')
+    FILE_DATA_FOLDER_NAME = os.getenv('FILE_DATA_FOLDER_NAME')
+    
+    PRIVATE_DATA_FILE_PATH = os.getcwd() + '/' + PRIVATE_DATA_FOLDER_NAME
+    TEMP_FILE_FILE_PATH = os.getcwd() + '/' + TEMP_FILE_FOLDER_NAME
+    FILE_DATA_FILE_PATH = os.getcwd() + '/' + FILE_DATA_FOLDER_NAME
+
+    if (not os.path.isdir(PRIVATE_DATA_FILE_PATH)):
+        os.mkdir(PRIVATE_DATA_FILE_PATH)
+    if (not os.path.isdir(TEMP_FILE_FILE_PATH)):
+        os.mkdir(TEMP_FILE_FILE_PATH)
+    if (not os.path.isdir(FILE_DATA_FILE_PATH)):
+        os.mkdir(FILE_DATA_FILE_PATH)
+    # privateDataFilePath = os.getcwd() + '/private_data/' + current_user.get_id() + '.enc'
+    # fileDataPathRelative = '/files/' + current_user.get_id() + '/'
+    # tempFilePath = os.getcwd() + '/temp_download/temp'
+    # fileDataPath = os.getcwd() + fileDataPathRelative
+
     return {
         'api': api,
         'bcrypt': bcrypt,
@@ -40,4 +60,9 @@ def flaskInit():
         'metadata_obj': metadata_obj,
         'login_manager': login_manager,
         'filesUploadSet': filesUploadSet,
+        'PRIVATE_DATA_FILE_PATH': PRIVATE_DATA_FILE_PATH,
+        'TEMP_FILE_FILE_PATH': TEMP_FILE_FILE_PATH,
+        'FILE_DATA_FILE_PATH': FILE_DATA_FILE_PATH,
+        'FILE_DATA_FOLDER_NAME': FILE_DATA_FOLDER_NAME,
+        'TEMP_FILE_FOLDER_NAME': TEMP_FILE_FOLDER_NAME
     }

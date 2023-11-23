@@ -8,4 +8,5 @@ flask_sqlalchemy
 flask_mysqldb
 flask_bcrypt
 flask_uploads
+flask_wtf
 python-dotenv
