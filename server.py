@@ -1,13 +1,10 @@
-from flask import Flask, json, jsonify, request, send_file, render_template, url_for, redirect
+from flask import json, jsonify, request, send_file, render_template, url_for, redirect
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, ForeignKey, MetaData, String
 from algorithm import *
-from flask_bcrypt import Bcrypt
-from sqlalchemy.sql import func
 from form import *
-from flask_uploads import configure_uploads, UploadSet, ALL
 from init import *
 import json
 from Crypto import Random

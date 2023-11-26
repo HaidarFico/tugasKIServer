@@ -48,10 +48,6 @@ def flaskInit():
         os.mkdir(TEMP_FILE_FILE_PATH)
     if (not os.path.isdir(FILE_DATA_FILE_PATH)):
         os.mkdir(FILE_DATA_FILE_PATH)
-    # privateDataFilePath = os.getcwd() + '/private_data/' + current_user.get_id() + '.enc'
-    # fileDataPathRelative = '/files/' + current_user.get_id() + '/'
-    # tempFilePath = os.getcwd() + '/temp_download/temp'
-    # fileDataPath = os.getcwd() + fileDataPathRelative
 
     return {
         'api': api,
