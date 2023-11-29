@@ -5,6 +5,7 @@ from flask_wtf.file import FileField
 
 class RegisterForm(FlaskForm):
     username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "username"})
+    email = StringField(validators=[InputRequired(), Length(min=4, max=100)], render_kw={"placeholder": "email"})
     password = PasswordField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "password"})
     submit = SubmitField('Register')
     

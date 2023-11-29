@@ -9,7 +9,7 @@
     <h1>DASHBOARD</h1>
     <h2>Files</h2>
     {%if filesArray != None%}
-    <form method="post">
+    <form method="post" action="{{url_for('downloadFile')}}">
     {%for filename in filesArray%}
     <ul>
         {{filename}}
@@ -36,14 +36,14 @@
         {%endif%}
     </table>
     <h2>Upload Files</h2>
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" action="{{url_for('postFiles')}}">
         {{uploadFileForm.hidden_tag()}}
         <!-- {{uploadFileForm.filename}} -->
         {{uploadFileForm.file}}
         {{uploadFileForm.submit}}
     </form>
     <h2>Upload Private Data</h2>
-    <form method="post">
+    <form method="post" action="{{url_for('postPrivateData')}}">
         {{privateDataForm.hidden_tag()}}
         {{privateDataForm.data_name}}
         {{privateDataForm.data_isi}}

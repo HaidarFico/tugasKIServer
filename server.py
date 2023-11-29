@@ -1,44 +1,29 @@
-from flask import Flask, json, jsonify, request, send_file, render_template, url_for, redirect
+from flask import json, jsonify, request, send_file, render_template, url_for, redirect
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, ForeignKey, MetaData, String
 from algorithm import *
-from flask_bcrypt import Bcrypt
-from sqlalchemy.sql import func
 from form import *
-from flask_uploads import configure_uploads, UploadSet, ALL
+from init import *
 import json
+from Crypto import Random
+from helper import *
 
-api = Flask(__name__)
-        
-api.config['MYSQL_HOST'] = '127.0.0.1'
-api.config['MYSQL_USER'] = 'root'
-api.config['MYSQL_PASSWORD'] = 'change-me'
-api.config['MYSQL_DB'] = 'KI'
-api.config['MYSQL_PORT'] = 3306
-# mysql = MySQL(api)
-bcrypt = Bcrypt(api)
-SECRET_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAA'  # Store this securely
-ENCRYPTION_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAA'  # Use a secure key for encryption
-IV = 'MKLOPOOO'
-
-
-api.config['UPLOAD_FOLDER'] = 'uploads'
-api.config['SECRET_KEY'] = SECRET_KEY
-api.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:change-me@127.0.0.1:3306/KI'
-print(SECRET_KEY)
-print(IV)
-db = SQLAlchemy(api)
-metadata_obj = MetaData()
-login_manager = LoginManager()
-login_manager.init_app(api)
-login_manager.login_view = 'login'
-
-api.config['UPLOADED_FILES_DEST'] = os.getcwd() + '/temp_download'
-# filesUploadSet = UploadSet('files', ALL, os.getcwd() + '/temp_download')
-filesUploadSet = UploadSet('files')
-configure_uploads(api, filesUploadSet)
+initRes = flaskInit()
+api = initRes.get('api')
+bcrypt = initRes.get('bcrypt')
+login_manager = initRes.get('login_manager')
+db = initRes.get('db')
+metadata_obj = initRes.get('metadata_obj')
+filesUploadSet = initRes.get('filesUploadSet') 
+PRIVATE_DATA_FILE_PATH = initRes.get('PRIVATE_DATA_FILE_PATH')
+TEMP_FILE_FILE_PATH = initRes.get('TEMP_FILE_FILE_PATH')
+FILE_DATA_FILE_PATH = initRes.get('FILE_DATA_FILE_PATH')
+FILE_DATA_FOLDER_NAME = initRes.get('FILE_DATA_FOLDER_NAME')
+TEMP_FILE_FOLDER_NAME = initRes.get('TEMP_FILE_FOLDER_NAME')
+SECRET_KEY = api.secret_key.encode('utf-8')
+IV = Random.get_random_bytes(8)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -49,6 +34,10 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(100))
+    public_key = db.Column(db.String(3000), nullable=False)
+    private_key = db.Column(db.String(3000), nullable=False)
+    symmetric_key = db.Column(db.String(3000), nullable=False)
 # user = db.Table(
 #     "user",
 #     Column('id', Integer, primary_key=True, autoincrement=True),
@@ -92,101 +81,127 @@ def register():
     form = RegisterForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data)
-        # return redirect(url_for('login'))
-        new_user = User(username=form.username.data, password=hashed_password)
+        keys = createKeys()
+        # print(keys.get(''))
+        new_user = User(username=form.username.data, password=hashed_password, email=form.email.data, public_key=keys.get('publicKey'), private_key=keys.get('privateKey'), symmetric_key=keys.get('symmetricKeyEncrypted'))
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))
     return render_template('register.html', form=form)
 
 
-@api.route('/dashboard', methods=['GET', 'POST'])
+@api.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():
     privateDataForm= PrivateDataForm()
     fileUploadForm= FileUploadForm()
     privateDataArr = None
-    privateDataFilePath = os.getcwd() + '/private_data/' + current_user.get_id() + '.enc'
     filesArray = None
-    fileDataPathRelative = '/files/' + current_user.get_id() + '/'
-    fileDataPath = os.getcwd() + fileDataPathRelative
+
+    privateDataFilePath = PRIVATE_DATA_FILE_PATH + '/' + current_user.get_id() + '.enc'
+    fileDataPath = FILE_DATA_FILE_PATH + '/' + current_user.get_id() + '/'
+    # fileDataPathRelative = '/files/' + current_user.get_id() + '/'
     tempFilePath = os.getcwd() + '/temp_download/temp'
 
-
     if os.path.exists(fileDataPath):
-        dirList = getAllFiles(fileDataPathRelative)
+        dirList = getAllFiles(fileDataPath)
         if len(dirList) > 0:
             filesArray = dirList.copy()
             
     if os.path.exists(privateDataFilePath):
         with open(privateDataFilePath, 'rb') as fo:
             dataEncrypted = fo.read()
-            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), SECRET_KEY.encode('utf-8'))
+            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), SECRET_KEY)
             dataArray = json.loads(dataDecrypted)
             privateDataArr = dataArray.copy()
-
-    if request.method == 'POST' and filesArray != None and request.form.get('download') != None:
-        for filePOSTName in filesArray:
-            if request.form['download'] == filePOSTName:
-                print(request.form['download'])
-                filePathDir = fileDataPath + filePOSTName
-                print('this is filepathdir')
-                print(filePathDir)
-                with open(filePathDir, "rb") as fo:
-                    encryptFile = fo.read()
-                    decryptFile = decrypt_data_cbc(encryptFile.decode(), SECRET_KEY.encode('utf-8'))
-                    print(decryptFile)
-                    with open(tempFilePath, "wb") as fr:
-                        fr.write(decryptFile.encode('utf-8'))
-                return send_file(tempFilePath)
-
-    if privateDataForm.validate_on_submit():
-        if privateData.select().where(privateData.c.user_id == current_user.get_id()) == None:
-            privateData.insert().values(user_id = current_user.get_id())
-        
-        data = {
-            f'{privateDataForm.data_name.data}' : f'{privateDataForm.data_isi.data}'
-        }
-
-        dataMerged = None
-        if privateDataArr != None:
-            dataMerged = data | privateDataArr
-        else:
-            dataMerged = data
-
-        privateDataArr = dataMerged
-        dataJson = json.dumps(dataMerged)
-        encryptedData = encrypt_data_cbc(dataJson.encode('utf-8'), IV.encode('utf-8'), SECRET_KEY.encode('utf-8'))
-        with open(privateDataFilePath, 'wb') as fo:
-            fo.write(encryptedData.encode('utf-8'))
-        
-        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr, filesArray=filesArray)
-    
-    if fileUploadForm.validate_on_submit():
-        tempFilePath = os.getcwd() + '/temp_download/temp'
-        newFilePathDir = os.getcwd() + '/files/' + current_user.get_id() + '/'
-        newFilePath = newFilePathDir + fileUploadForm.file.data.filename
-
-        if not os.path.exists(newFilePathDir):
-            os.makedirs(newFilePathDir)
-
-        filesUploadSet.save(fileUploadForm.file.data, name="temp")
-        with open(tempFilePath, 'rb') as fo:
-            fileData = fo.read()
-            encrypted_file = encrypt_data_cbc(fileData, IV.encode('utf-8'), SECRET_KEY.encode('utf-8'))
-            with open(newFilePath, 'wb') as fr:
-                fr.write(encrypted_file.encode('utf-8'))
-        os.remove(tempFilePath)
-        if filesArray is not None:
-            filesArray.append(fileUploadForm.file.data.filename)
-        else:
-            filesArray = [fileUploadForm.file.data.filename]
             
-
-        return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr, filesArray=filesArray)
-    
-
     return render_template('dashboard.html', privateDataForm=privateDataForm, uploadFileForm=fileUploadForm, privateDataArr=privateDataArr, filesArray=filesArray)
+
+@api.route('/postPrivateData', methods=['POST'])
+def postPrivateData():
+    privateDataForm= PrivateDataForm()
+
+    privateDataArr = None
+    privateDataFilePathUser = PRIVATE_DATA_FILE_PATH + '/' +current_user.get_id() + '.enc'
+
+    if privateData.select().where(privateData.c.user_id == current_user.get_id()) == None:
+        privateData.insert().values(user_id = current_user.get_id())
+
+    if os.path.exists(privateDataFilePathUser):
+        with open(privateDataFilePathUser, 'rb') as fo:
+            dataEncrypted = fo.read()
+            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), SECRET_KEY)
+            dataArray = json.loads(dataDecrypted)
+            privateDataArr = dataArray.copy()
+    
+    data = {
+        f'{privateDataForm.data_name.data}' : f'{privateDataForm.data_isi.data}'
+    }
+
+    dataMerged = None
+    if privateDataArr != None:
+        dataMerged = data | privateDataArr
+    else:
+        dataMerged = data
+
+    privateDataArr = dataMerged
+    dataJson = json.dumps(dataMerged)
+    encryptedData = encrypt_data_cbc(dataJson.encode('utf-8'), IV, SECRET_KEY)
+    with open(privateDataFilePathUser, 'wb') as fo:
+        fo.write(encryptedData.encode('utf-8'))
+    
+    return redirect('/dashboard')
+
+@api.route('/postFiles', methods=['POST'])
+def postFiles():
+    fileUploadForm= FileUploadForm()
+    # fileDataPathRelative = '/files/' + current_user.get_id() + '/'
+    fileDataPath = FILE_DATA_FILE_PATH + '/' + current_user.get_id() + '/'
+    tempFilePath = TEMP_FILE_FILE_PATH + '/temp'
+
+    filename = fileUploadForm.file.data
+    print('THIS IS FILENAME ')
+    print(filename)
+    if filename != '':
+        file_ext = os.path.splitext(filename)[1]
+        print(file_ext)
+
+    if not os.path.exists(fileDataPath):
+        os.mkdir(fileDataPath)
+    
+    # print(fileUploadForm.file.data)
+    tempFilePath = TEMP_FILE_FILE_PATH + '/temp' + fileUploadForm.data
+    newFilePath = fileDataPath + fileUploadForm.file.data.filename
+
+    filesUploadSet.save(fileUploadForm.file.data, name='temp' + '.')
+    with open(tempFilePath, 'rb') as fo:
+        fileData = fo.read()
+        encrypted_file = encrypt_data_cbc(fileData, IV, SECRET_KEY)
+        with open(newFilePath, 'wb') as fr:
+            fr.write(encrypted_file.encode('utf-8'))
+    os.remove(tempFilePath)        
+
+    return redirect('/dashboard')
+
+@api.route('/downloadFile', methods=['POST'])
+def downloadFile():
+    filesArray = None
+    fileDataPath = FILE_DATA_FILE_PATH + '/' + current_user.get_id() + '/'
+
+    if os.path.exists(fileDataPath):
+            dirList = getAllFiles(fileDataPath)
+            if len(dirList) > 0:
+                filesArray = dirList.copy()
+    for filePOSTName in filesArray:
+        if request.form['download'] == filePOSTName:
+            filePathDir = fileDataPath + filePOSTName
+            with open(filePathDir, "rb") as fo:
+                encryptFile = fo.read()
+                decryptFile = decrypt_data_cbc(encryptFile.decode(), SECRET_KEY)
+                print(decryptFile)
+                with open(fileDataPath, "wb") as fr:
+                    fr.write(decryptFile.encode('utf-8'))
+            return send_file(fileDataPath)
 
 @api.route('/test', methods=['GET'])
 def test() -> json:
@@ -194,189 +209,11 @@ def test() -> json:
         "message": "Hello World"
     })
 
-@api.route('/aes', methods=['POST', 'GET'])
-def AESHandler() -> json:
-    username = request.form['username']
-    password = request.form['password']
-    key = request.form['key']
-
-    cur = mysql.connection.cursor()
-    queryString = "SELECT password FROM user WHERE username = '" + username + "'"
-    cur.execute(queryString)
-    rv = cur.fetchall()
-    if password != rv[0][0]:
-        return jsonify(
-            {
-                "message": "invalid username or password"
-            }
-        )
-
-    if request.method == 'POST':
-        f = request.files['file']
-        filePath = 'files/' + f.filename
-        f.save(filePath)
-        f.close()
-        encryptor = AESEncryptor(key)
-        print(filePath)
-        encryptor.encrypt_file(filePath)
-        return jsonify(
-            {
-                "message": "success!"
-            }
-    )
-
-    if request.method == 'GET':
-        filePath = '/files/' + request.form['filename'] + '.enc'
-        filePathFull = os.getcwd() + filePath
-        encryptor = AESEncryptor(key)
-        newFileDir = os.getcwd() + '/decrypt/' + 'temp'
-
-        encryptor.decrypt_file(filePathFull)
-        return send_file(newFileDir) 
-        
-    return jsonify(
-        {
-            "message": "invalid method."
-        }
-    )
-
-@api.route('/rc4', methods=['POST', 'GET'])
-def RC4Handler() -> json:
-    username = request.form['username']
-    password = request.form['password']
-    key = request.form['key']
-
-    cur = mysql.connection.cursor()
-    queryString = "SELECT password FROM user WHERE username = '" + username + "'"
-    cur.execute(queryString)
-    rv = cur.fetchall()
-    if password != rv[0][0]:
-        return jsonify(
-            {
-                "message": "invalid username or password"
-            }
-        )
-
-    if request.method == 'POST':
-        f = request.files['file']
-        filePath = 'files/' + f.filename
-        f.save(filePath)
-        f.close()
-        pre_encrypt(filePath, key)
-        print(filePath)
-        os.remove(filePath)
-        return jsonify(
-            {
-                "message": "success!"
-            }
-    )
-
-    if request.method == 'GET':
-        filePath = '/files/' + request.form['filename'] + '.enc'
-        filePathFull = os.getcwd() + filePath
-        pre_decrypt(filePathFull, key)
-        newFileDir = os.getcwd() + '/decrypt/' + 'temp'
-        
-        return send_file(newFileDir) 
-        
-    return jsonify(
-        {
-            "message": "invalid method."
-        }
-    )
-
-def getAllFiles(relativeFilePath: str):
-    dir_path = os.getcwd()
+def getAllFiles(fullFilePath: str):
+    # dir_path = os.getcwd()
     dirs = []
-    for dirName, subDirList, fileList in os.walk(dir_path + '/' + relativeFilePath):
+    for dirName, subDirList, fileList in os.walk(fullFilePath):
         dirs.append(fileList)
+    print(fullFilePath)
+    print(dirs)
     return dirs[0]
-# @api.route('/create_user', methods=['POST'])
-# def create_user():
-#     try:
-#         username = request.form.get('username')
-#         email = request.form.get('email')
-#         password = request.form.get('password')
-
-#         # Create a new user in userss
-#         cursor = mysql.connection.cursor()
-#         cursor.execute("INSERT INTO userss (username, email, password) VALUES (%s, %s, %s) RETURNING user_id", (username, email, password))
-#         new_user_id = cursor.fetchone()[0]
-#         cursor.close()
-
-#         return jsonify({"message": "User created successfully with user_id: " + str(new_user_id)})
-
-#     except Exception as e:
-#         return jsonify({"error": str(e)})
-
-# @api.route('/upload', methods=['POST'])
-# def upload_file():
-#     user_id = request.form.get('user_id')
-#     file = request.files['file']
-
-#     if file:
-#         try:
-#             # Store the file
-#             file_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{user_id}_file.txt')
-#             file.save(file_path)
-
-#             iv = os.urandom(8) 
-
-#             # Create a Cipher object for DES in CBC mode with the IV
-#             cipher = Cipher(algorithms.TripleDES(ENCRYPTION_KEY), modes.CBC(iv), backend=default_backend())
-#             encryptor = cipher.encryptor()
-
-#             file_data = open(file_path, 'rb').read()
-
-#             # Apply PKCS7 padding to the file data
-#             padder = PKCS7(64).padder()
-#             padded_file_data = padder.update(file_data) + padder.finalize()
-
-#             # Encrypt the padded file data
-#             encrypted_file_data = encryptor.update(padded_file_data) + encryptor.finalize()
-
-#             # Store the encrypted data in a text file
-#             encrypted_file_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{user_id}_encrypted_file.txt')
-#             with open(encrypted_file_path, 'wb') as encrypted_file:
-#                 encrypted_file.write(encrypted_file_data)
-
-#             cursor = database.cursor()
-#             cursor.execute("UPDATE userss SET file_name = %s, file_data = %s, iv = %s WHERE user_id = %s",
-#                            ('file', encrypted_file_data, iv, user_id))
-#             database.commit()
-#             cursor.close()
-
-#             return jsonify({"message": "File uploaded and encrypted successfully."})
-#         except Exception as e:
-#             return jsonify({"error": str(e)})
-#     return jsonify({"error": "No File file provided."})
-
-
-# @api.route('/get_decrypted/<user_id>', methods=['GET'])
-# def get_decrypted(user_id):
-#     try:
-#         # Retrieve the encrypted file data and IV from the database based on user_id
-#         cursor = database.cursor()
-#         cursor.execute("SELECT file_data, iv FROM userss WHERE user_id = %s", (user_id,))
-#         result = cursor.fetchone()
-#         cursor.close()
-
-#         if result:
-#             encrypted_file_data, iv = result
-#             # Decrypt the file using DES in CBC mode
-#             cipher = Cipher(algorithms.TripleDES(ENCRYPTION_KEY), modes.CBC(iv), backend=default_backend())
-#             decryptor = cipher.decryptor()
-#             decrypted_file_data = decryptor.update(encrypted_file_data) + decryptor.finalize()
-
-#             # Unpad the decrypted data using PKCS7
-#             unpadder = PKCS7(64).unpadder()
-#             unpadded_data = unpadder.update(decrypted_file_data) + unpadder.finalize()
-
-#             # Create a response with the decrypted data
-#             response = Response(unpadded_data)
-#             return response
-
-#         return jsonify({"error": "File not found for the given user."})
-
-#     except Exception as e:
-#         return jsonify({"error": str(e)})
