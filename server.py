@@ -33,9 +33,10 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
-    # public_key = db.Column(db.string(100), nullable=False)
-    # private_key = db.Column(db.string(100), nullable=False)
-    # symmetric_key = db.Column(db.string(100), nullable=False)
+    email = db.Column(db.String(100))
+    public_key = db.Column(db.String(513), nullable=False)
+    private_key = db.Column(db.String(513), nullable=False)
+    symmetric_key = db.Column(db.String(513), nullable=False)
 # user = db.Table(
 #     "user",
 #     Column('id', Integer, primary_key=True, autoincrement=True),
