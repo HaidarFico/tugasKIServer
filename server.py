@@ -8,6 +8,7 @@ from form import *
 from init import *
 import json
 from Crypto import Random
+from helper import *
 
 initRes = flaskInit()
 api = initRes.get('api')
@@ -34,9 +35,9 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(20), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
     email = db.Column(db.String(100))
-    public_key = db.Column(db.String(513), nullable=False)
-    private_key = db.Column(db.String(513), nullable=False)
-    symmetric_key = db.Column(db.String(513), nullable=False)
+    public_key = db.Column(db.String(3000), nullable=False)
+    private_key = db.Column(db.String(3000), nullable=False)
+    symmetric_key = db.Column(db.String(3000), nullable=False)
 # user = db.Table(
 #     "user",
 #     Column('id', Integer, primary_key=True, autoincrement=True),
@@ -80,8 +81,9 @@ def register():
     form = RegisterForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data)
-        # return redirect(url_for('login'))
-        new_user = User(username=form.username.data, password=hashed_password)
+        keys = createKeys()
+        # print(keys.get(''))
+        new_user = User(username=form.username.data, password=hashed_password, email=form.email.data, public_key=keys.get('publicKey'), private_key=keys.get('privateKey'), symmetric_key=keys.get('symmetricKeyEncrypted'))
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))
