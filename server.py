@@ -45,12 +45,11 @@ class User(db.Model, UserMixin):
 #     Column('password', String(80), unique=True)
 # )
 
-files = db.Table(
-    "files",
-    Column('id', Integer, primary_key=True, autoincrement=True),
-    Column('user_id', Integer, ForeignKey("user.id"), nullable=False),
-    Column('filename', String(50), nullable=False)
-)
+class File(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('files', lazy=True))
 
 privateData = db.Table(
     "private_data",
@@ -59,7 +58,41 @@ privateData = db.Table(
     Column('user_id', Integer, ForeignKey("user.id"), nullable=False),
     Column('data', String(50), nullable=True)
 )
+class FileRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    file_id = db.Column(db.Integer, db.ForeignKey('file.id'), nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(50), nullable=False, default='pending')
+    file = db.relationship('File', backref=db.backref('requests', lazy=True))
+    requester = db.relationship('User', foreign_keys=[requester_id])
+    owner = db.relationship('User', foreign_keys=[owner_id])
 
+@api.route('/files', methods=['GET'])
+@login_required
+def list_files():
+    files = File.query.all()
+    file_data = []
+    for file in files:
+        request = FileRequest.query.filter_by(file_id=file.id, requester_id=current_user.id).first()
+        status = request.status if request else 'not requested'
+        file_data.append({'id': file.id, 'filename': file.filename, 'username': file.user.username, 'status': status})
+    return render_template('request_file.html', files=file_data)
+
+@api.route('/request_file', methods=['POST'])
+@login_required
+def request_file():
+    file_id = request.form.get('file_id')
+    file = File.query.get(file_id)
+    new_request = FileRequest(
+        file_id=file_id,
+        requester_id=current_user.id,
+        owner_id=file.user_id,
+        status='waiting confirmation'
+    )
+    db.session.add(new_request)
+    db.session.commit()
+    return redirect(url_for('list_files'))
 
 @api.route('/', methods=['GET'])
 def home():
@@ -89,7 +122,28 @@ def register():
         return redirect(url_for('login'))
     return render_template('register.html', form=form)
 
+@api.route('/update_request_status', methods=['POST'])
+@login_required
+def update_request_status():
+    request_id = request.form.get('request_id')
+    new_status = request.form.get('status')  # accepted or declined
 
+    file_request = FileRequest.query.get(request_id)
+    if file_request and file_request.owner_id == current_user.id:
+        file_request.status = new_status
+        db.session.commit()
+        return redirect(url_for('manage_requests'))
+    return 'Invalid Request', 400
+
+@api.route('/manage_requests', methods=['GET'])
+@login_required
+def manage_requests():
+    # Fetch requests where the current user is the owner of the requested file
+    incoming_requests = FileRequest.query \
+        .join(File, FileRequest.file_id == File.id) \
+        .filter(File.user_id == current_user.id).all()
+
+    return render_template('manage_request.html', requests=incoming_requests)
 @api.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():

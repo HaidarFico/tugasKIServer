@@ -7,6 +7,14 @@
 </head>
 <body>
     <h1>DASHBOARD</h1>
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('list_files') }}">Request Files</a></li>
+        </ul>
+        <ul>
+            <li><a href="{{ url_for('manage_requests') }}">Manage Request</a></li>
+        </ul>
+    </nav>
     <h2>Files</h2>
     {%if filesArray != None%}
     <form method="post" action="{{url_for('downloadFile')}}">
