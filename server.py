@@ -2,7 +2,7 @@ from flask import json, jsonify, request, send_file, render_template, url_for, r
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Column, Integer, ForeignKey, MetaData, String
+from sqlalchemy import Column, Integer, ForeignKey, MetaData, String, select, Table
 from algorithm import *
 from form import *
 from init import *
@@ -38,27 +38,19 @@ class User(db.Model, UserMixin):
     public_key = db.Column(db.String(3000), nullable=False)
     private_key = db.Column(db.String(3000), nullable=False)
     symmetric_key = db.Column(db.String(3000), nullable=False)
-# user = db.Table(
-#     "user",
-#     Column('id', Integer, primary_key=True, autoincrement=True),
-#     Column('username', String(20), unique=True),
-#     Column('password', String(80), unique=True)
-# )
 
-files = db.Table(
-    "files",
-    Column('id', Integer, primary_key=True, autoincrement=True),
-    Column('user_id', Integer, ForeignKey("user.id"), nullable=False),
-    Column('filename', String(50), nullable=False)
-)
+class files(db.Model):
+    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(Integer, ForeignKey("user.id"), nullable=False)
+    filename = db.Column(String(50), nullable=False)
+    file_extension = db.Column(String(50), nullable=True)
 
-privateData = db.Table(
-    "private_data",
-    Column('id', Integer, primary_key=True, autoincrement=True),
-    Column('data_name', String(50), nullable=True),
-    Column('user_id', Integer, ForeignKey("user.id"), nullable=False),
-    Column('data', String(50), nullable=True)
-)
+
+class privateData(db.Model):
+    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    data_name = db.Column('data_name', String(50), nullable=True)
+    user_id = db.Column(Integer, ForeignKey("user.id"), nullable=False)
+    data = db.Column(String(50), nullable=True)
 
 
 @api.route('/', methods=['GET'])
@@ -82,7 +74,6 @@ def register():
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data)
         keys = createKeys()
-        # print(keys.get(''))
         new_user = User(username=form.username.data, password=hashed_password, email=form.email.data, public_key=keys.get('publicKey'), private_key=keys.get('privateKey'), symmetric_key=keys.get('symmetricKeyEncrypted'))
         db.session.add(new_user)
         db.session.commit()
@@ -96,18 +87,18 @@ def dashboard():
     privateDataForm= PrivateDataForm()
     fileUploadForm= FileUploadForm()
     privateDataArr = None
-    filesArray = None
+    filesArray = list()
 
     privateDataFilePath = PRIVATE_DATA_FILE_PATH + '/' + current_user.get_id() + '.enc'
-    fileDataPath = FILE_DATA_FILE_PATH + '/' + current_user.get_id() + '/'
-    # fileDataPathRelative = '/files/' + current_user.get_id() + '/'
-    tempFilePath = os.getcwd() + '/temp_download/temp'
 
-    if os.path.exists(fileDataPath):
-        dirList = getAllFiles(fileDataPath)
-        if len(dirList) > 0:
-            filesArray = dirList.copy()
+    # Query for searching all uploaded files
+    query = select(files).where(files.user_id == current_user.get_id())
+    res = db.session.execute(query).all()
+    for listRes in res:
+        for row in listRes:
+            filesArray.append(f'{row.filename}.{row.file_extension}')
             
+    # Search for all private data
     if os.path.exists(privateDataFilePath):
         with open(privateDataFilePath, 'rb') as fo:
             dataEncrypted = fo.read()
@@ -123,9 +114,6 @@ def postPrivateData():
 
     privateDataArr = None
     privateDataFilePathUser = PRIVATE_DATA_FILE_PATH + '/' +current_user.get_id() + '.enc'
-
-    if privateData.select().where(privateData.c.user_id == current_user.get_id()) == None:
-        privateData.insert().values(user_id = current_user.get_id())
 
     if os.path.exists(privateDataFilePathUser):
         with open(privateDataFilePathUser, 'rb') as fo:
@@ -146,7 +134,7 @@ def postPrivateData():
 
     privateDataArr = dataMerged
     dataJson = json.dumps(dataMerged)
-    encryptedData = encrypt_data_cbc(dataJson.encode('utf-8'), IV, SECRET_KEY)
+    encryptedData = encrypt_data_cbc(dataJson.encode(), IV, SECRET_KEY)
     with open(privateDataFilePathUser, 'wb') as fo:
         fo.write(encryptedData.encode('utf-8'))
     
@@ -154,66 +142,63 @@ def postPrivateData():
 
 @api.route('/postFiles', methods=['POST'])
 def postFiles():
-    fileUploadForm= FileUploadForm()
-    # fileDataPathRelative = '/files/' + current_user.get_id() + '/'
-    fileDataPath = FILE_DATA_FILE_PATH + '/' + current_user.get_id() + '/'
+    fileUploadForm = FileUploadForm()
+    fileDataPath = FILE_DATA_FILE_PATH + '/'
     tempFilePath = TEMP_FILE_FILE_PATH + '/temp'
-
-    filename = fileUploadForm.file.data
-    print('THIS IS FILENAME ')
-    print(filename)
-    if filename != '':
-        file_ext = os.path.splitext(filename)[1]
-        print(file_ext)
 
     if not os.path.exists(fileDataPath):
         os.mkdir(fileDataPath)
     
-    # print(fileUploadForm.file.data)
-    tempFilePath = TEMP_FILE_FILE_PATH + '/temp' + fileUploadForm.data
-    newFilePath = fileDataPath + fileUploadForm.file.data.filename
+    fileName = getFileName(fileUploadForm.file.data.filename)
+    extension = getFileExtension(fileUploadForm.file.data.filename)
+    new_file = files(user_id = current_user.get_id(), filename = fileName, file_extension = extension)
+    db.session.add(new_file)
+    db.session.commit()
+    query = select(Column('id')).where(files.user_id == current_user.get_id()).where(files.filename == fileName)
+    res = db.session.execute(query)
+    fileId = None
+    for resIndividu in res.scalars():
+        fileId = resIndividu
 
-    filesUploadSet.save(fileUploadForm.file.data, name='temp' + '.')
+    newFilePath = fileDataPath + "{}".format(fileId)
+
+    filesUploadSet.save(fileUploadForm.file.data, name='temp')  
     with open(tempFilePath, 'rb') as fo:
         fileData = fo.read()
-        encrypted_file = encrypt_data_cbc(fileData, IV, SECRET_KEY)
+        encrypted_file = encrypt_data_cbc_file(fileData, IV, SECRET_KEY)
         with open(newFilePath, 'wb') as fr:
-            fr.write(encrypted_file.encode('utf-8'))
-    os.remove(tempFilePath)        
+            fr.write(encrypted_file)
+    os.remove(tempFilePath)
 
     return redirect('/dashboard')
 
 @api.route('/downloadFile', methods=['POST'])
 def downloadFile():
-    filesArray = None
-    fileDataPath = FILE_DATA_FILE_PATH + '/' + current_user.get_id() + '/'
+    filesMetadata = dict()
+    fileName = getFileName(request.form['download'])
+    fileDataFolderPath = FILE_DATA_FILE_PATH + '/'
 
-    if os.path.exists(fileDataPath):
-            dirList = getAllFiles(fileDataPath)
-            if len(dirList) > 0:
-                filesArray = dirList.copy()
-    for filePOSTName in filesArray:
-        if request.form['download'] == filePOSTName:
-            filePathDir = fileDataPath + filePOSTName
-            with open(filePathDir, "rb") as fo:
-                encryptFile = fo.read()
-                decryptFile = decrypt_data_cbc(encryptFile.decode(), SECRET_KEY)
-                print(decryptFile)
-                with open(fileDataPath, "wb") as fr:
-                    fr.write(decryptFile.encode('utf-8'))
-            return send_file(fileDataPath)
+    query = select(files).where(files.user_id == current_user.get_id()).where(files.filename == fileName)
+    res = db.session.execute(query).first()
+    for row in res:
+        filesMetadata['filename'] = row.filename 
+        filesMetadata['file_extension'] = row.file_extension 
+        filesMetadata['id'] = row.id 
+
+        fileDataPath = FILE_DATA_FILE_PATH + '/' + f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}'
+        filePathDir = fileDataFolderPath + f'{filesMetadata["id"]}'
+        with open(filePathDir, "rb") as fo:
+            encryptFile = fo.read()
+            decryptFile = decrypt_data_cbc_file(encryptFile, SECRET_KEY)
+            with open(fileDataPath, "wb") as fr:
+                fr.write(decryptFile)
+                return send_file(fileDataPath, as_attachment=True)
+
+    return redirect('/dashboard')
+    
 
 @api.route('/test', methods=['GET'])
 def test() -> json:
     return jsonify({
         "message": "Hello World"
     })
-
-def getAllFiles(fullFilePath: str):
-    # dir_path = os.getcwd()
-    dirs = []
-    for dirName, subDirList, fileList in os.walk(fullFilePath):
-        dirs.append(fileList)
-    print(fullFilePath)
-    print(dirs)
-    return dirs[0]
