@@ -32,3 +32,6 @@ def getAllFiles(fullFilePath: str):
     print(fullFilePath)
     print(dirs)
     return dirs[0]
+
+def generateIV():
+    return Random.get_random_bytes(8)
