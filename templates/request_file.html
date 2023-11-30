@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Request Files</title>
+</head>
+<body>
+    <h1>Available Files</h1>
+    <table>
+        <tr>
+            <th>File Name</th>
+            <th>Owner</th>
+            <th>Status/Action</th>
+
+        </tr>
+        {% for file in files %}
+        <tr>
+            <td>{{ file.filename }}</td>
+            <td>{{ file.username }}</td>
+            <td>
+                {% if file.status == 'not requested' %}
+                    <form action="{{ url_for('request_file') }}" method="post">
+                        <input type="hidden" name="file_id" value="{{ file.id }}">
+                        <button type="submit">Request File</button>
+                    </form>
+                {% else %}
+                    {{ file.status }}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
