@@ -22,8 +22,6 @@ TEMP_FILE_FILE_PATH = initRes.get('TEMP_FILE_FILE_PATH')
 FILE_DATA_FILE_PATH = initRes.get('FILE_DATA_FILE_PATH')
 FILE_DATA_FOLDER_NAME = initRes.get('FILE_DATA_FOLDER_NAME')
 TEMP_FILE_FOLDER_NAME = initRes.get('TEMP_FILE_FOLDER_NAME')
-SECRET_KEY = api.secret_key.encode('utf-8')
-IV = Random.get_random_bytes(8)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -39,7 +37,6 @@ class User(db.Model, UserMixin):
     private_key = db.Column(db.String(3000), nullable=False)
     symmetric_key = db.Column(db.String(3000), nullable=False)
 
-
 class files(db.Model):
     id = db.Column(Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -48,14 +45,12 @@ class files(db.Model):
     file_extension = db.Column(String(50), nullable=True)
     user = db.relationship('User', backref='uploaded_files')
 
-
-
-
 class privateData(db.Model):
     id = db.Column(Integer, primary_key=True, autoincrement=True)
     data_name = db.Column('data_name', String(50), nullable=True)
     user_id = db.Column(Integer, ForeignKey("user.id"), nullable=False)
     data = db.Column(String(50), nullable=True)
+
 class FileRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     file_id = db.Column(db.Integer, db.ForeignKey('files.id'), nullable=False)
@@ -162,7 +157,7 @@ def dashboard():
     if os.path.exists(privateDataFilePath):
         with open(privateDataFilePath, 'rb') as fo:
             dataEncrypted = fo.read()
-            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), SECRET_KEY)
+            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), getSymmetricKey(current_user.get_id(), db))
             dataArray = json.loads(dataDecrypted)
             privateDataArr = dataArray.copy()
             
@@ -178,7 +173,7 @@ def postPrivateData():
     if os.path.exists(privateDataFilePathUser):
         with open(privateDataFilePathUser, 'rb') as fo:
             dataEncrypted = fo.read()
-            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), SECRET_KEY)
+            dataDecrypted = decrypt_data_cbc(dataEncrypted.decode(), getSymmetricKey(current_user.get_id(), db))
             dataArray = json.loads(dataDecrypted)
             privateDataArr = dataArray.copy()
     
@@ -194,7 +189,7 @@ def postPrivateData():
 
     privateDataArr = dataMerged
     dataJson = json.dumps(dataMerged)
-    encryptedData = encrypt_data_cbc(dataJson.encode(), IV, SECRET_KEY)
+    encryptedData = encrypt_data_cbc(dataJson.encode(), generateIV(), getSymmetricKey(current_user.get_id(), db))
     with open(privateDataFilePathUser, 'wb') as fo:
         fo.write(encryptedData.encode('utf-8'))
     
@@ -225,7 +220,7 @@ def postFiles():
     filesUploadSet.save(fileUploadForm.file.data, name='temp')  
     with open(tempFilePath, 'rb') as fo:
         fileData = fo.read()
-        encrypted_file = encrypt_data_cbc_file(fileData, IV, SECRET_KEY)
+        encrypted_file = encrypt_data_cbc_file(fileData, generateIV(), getSymmetricKey(current_user.get_id(), db))
         with open(newFilePath, 'wb') as fr:
             fr.write(encrypted_file)
     os.remove(tempFilePath)
@@ -249,7 +244,7 @@ def downloadFile():
         filePathDir = fileDataFolderPath + f'{filesMetadata["id"]}'
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
-            decryptFile = decrypt_data_cbc_file(encryptFile, SECRET_KEY)
+            decryptFile = decrypt_data_cbc_file(encryptFile, getSymmetricKey(current_user.get_id(), db))
             with open(fileDataPath, "wb") as fr:
                 fr.write(decryptFile)
                 return send_file(fileDataPath, as_attachment=True)
@@ -262,3 +257,18 @@ def test() -> json:
     return jsonify({
         "message": "Hello World"
     })
+
+def getSymmetricKey(userId, db):
+    userDict = dict()
+    query = select(User).where(User.id == userId)
+    res = db.session.execute(query).first()
+
+    for row in res:
+        userDict['private_key'] = row.private_key
+        userDict['symmetric_key'] = row.symmetric_key
+
+    for userColumn in userDict:
+        print(userDict[userColumn])
+
+    print(decrypt_bytes(userDict['symmetric_key'], userDict['private_key']))
+    return decrypt_bytes(userDict['symmetric_key'], userDict['private_key'])
