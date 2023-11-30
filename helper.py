@@ -35,3 +35,6 @@ def getAllFiles(fullFilePath: str):
 
 def generateIV():
     return Random.get_random_bytes(8)
+
+def generateSymmetricKey():
+    return Random.get_random_bytes(24)
