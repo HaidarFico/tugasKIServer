@@ -190,7 +190,6 @@ def downloadFile():
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
             decryptFile = decrypt_data_cbc_file(encryptFile, SECRET_KEY)
-            print(decryptFile)
             with open(fileDataPath, "wb") as fr:
                 fr.write(decryptFile)
                 return send_file(fileDataPath, as_attachment=True)
