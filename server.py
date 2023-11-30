@@ -162,13 +162,12 @@ def postFiles():
 
     newFilePath = fileDataPath + "{}".format(fileId)
 
-    filesUploadSet.save(fileUploadForm.file.data, name='temp')
+    filesUploadSet.save(fileUploadForm.file.data, name='temp')  
     with open(tempFilePath, 'rb') as fo:
         fileData = fo.read()
-        encrypted_file = encrypt_data_cbc(fileData, IV, SECRET_KEY)
-        print(encrypted_file)
+        encrypted_file = encrypt_data_cbc_file(fileData, IV, SECRET_KEY)
         with open(newFilePath, 'wb') as fr:
-            fr.write(encrypted_file.encode())
+            fr.write(encrypted_file)
     os.remove(tempFilePath)
 
     return redirect('/dashboard')
@@ -188,18 +187,13 @@ def downloadFile():
 
         fileDataPath = FILE_DATA_FILE_PATH + '/' + f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}'
         filePathDir = fileDataFolderPath + f'{filesMetadata["id"]}'
-        print("THIS IS FILEPATHDIR")
-        print(filePathDir)
-        print("THIS IS FileDatapath")
-        print(fileDataPath)
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
-            decryptFile = decrypt_data_cbc(encryptFile.decode(), SECRET_KEY)
+            decryptFile = decrypt_data_cbc_file(encryptFile, SECRET_KEY)
             print(decryptFile)
             with open(fileDataPath, "wb") as fr:
-                fr.write(decryptFile.encode())
-                send_file(fileDataPath)
-                os.remove(fileDataPath)
+                fr.write(decryptFile)
+                return send_file(fileDataPath, as_attachment=True)
 
     return redirect('/dashboard')
     
