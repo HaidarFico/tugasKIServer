@@ -1,6 +1,5 @@
 from rsa_code import *
 from Crypto import Random
-from sqlalchemy import select
 
 def createKeys():
     privateKey = generate_key_str()

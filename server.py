@@ -267,8 +267,4 @@ def getSymmetricKey(userId, db):
         userDict['private_key'] = row.private_key
         userDict['symmetric_key'] = row.symmetric_key
 
-    for userColumn in userDict:
-        print(userDict[userColumn])
-
-    print(decrypt_bytes(userDict['symmetric_key'], userDict['private_key']))
     return decrypt_bytes(userDict['symmetric_key'], userDict['private_key'])
