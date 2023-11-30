@@ -10,3 +10,25 @@ def createKeys():
         'publicKey': publicKey,
         'symmetricKeyEncrypted': symmetricKeyEncrypted
     }
+
+def getFileExtension(fileName):
+    splittedText = fileName.split('.')
+    if len(splittedText) != 2:
+        return None
+    
+    return splittedText[1]
+
+def getFileName(fileName):
+    splittedText = fileName.split('.')
+    if len(splittedText) != 2:
+        return None
+    
+    return splittedText[0]
+
+def getAllFiles(fullFilePath: str):
+    dirs = []
+    for dirName, subDirList, fileList in os.walk(fullFilePath):
+        dirs.append(fileList)
+    print(fullFilePath)
+    print(dirs)
+    return dirs[0]
