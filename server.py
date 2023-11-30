@@ -38,12 +38,6 @@ class User(db.Model, UserMixin):
     public_key = db.Column(db.String(3000), nullable=False)
     private_key = db.Column(db.String(3000), nullable=False)
     symmetric_key = db.Column(db.String(3000), nullable=False)
-# user = db.Table(
-#     "user",
-#     Column('id', Integer, primary_key=True, autoincrement=True),
-#     Column('username', String(20), unique=True),
-#     Column('password', String(80), unique=True)
-# )
 
 files = db.Table(
     "files",
@@ -82,7 +76,6 @@ def register():
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data)
         keys = createKeys()
-        # print(keys.get(''))
         new_user = User(username=form.username.data, password=hashed_password, email=form.email.data, public_key=keys.get('publicKey'), private_key=keys.get('privateKey'), symmetric_key=keys.get('symmetricKeyEncrypted'))
         db.session.add(new_user)
         db.session.commit()
