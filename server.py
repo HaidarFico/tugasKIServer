@@ -251,6 +251,11 @@ def downloadFile():
 
     return redirect('/dashboard')
     
+@api.route('/getPrivateKey', methods=['GET'])
+def getPrivateKey():
+    privateKey = getPrivateKey(current_user.get_id(), db)
+    return render_template('private_key.html', privateKey= privateKey)
+
 
 @api.route('/test', methods=['GET'])
 def test() -> json:
@@ -268,3 +273,12 @@ def getSymmetricKey(userId, db):
         userDict['symmetric_key'] = row.symmetric_key
 
     return decrypt_bytes(userDict['symmetric_key'], userDict['private_key'])
+
+def getPrivateKey(userId, db):
+    query = select(User).where(User.id == userId)
+    res = db.session.execute(query).first()
+
+    for row in res:
+        privateKey = row.private_key
+
+    return privateKey
