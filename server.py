@@ -1,3 +1,5 @@
+import httplib2
+
 from flask import json, jsonify, request, send_file, render_template, url_for, redirect
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
@@ -9,6 +11,8 @@ from init import *
 import json
 from Crypto import Random
 from helper import *
+from email_sending import *
+import os
 
 initRes = flaskInit()
 api = initRes.get('api')
@@ -24,6 +28,9 @@ FILE_DATA_FOLDER_NAME = initRes.get('FILE_DATA_FOLDER_NAME')
 TEMP_FILE_FOLDER_NAME = initRes.get('TEMP_FILE_FOLDER_NAME')
 SECRET_KEY = api.secret_key.encode('utf-8')
 IV = Random.get_random_bytes(8)
+credentials = get_credentials()
+http = credentials.authorize(httplib2.Http())
+service = discovery.build('gmail', 'v1', http=http)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -128,9 +135,25 @@ def update_request_status():
     file_request = FileRequest.query.get(request_id)
     if file_request and file_request.owner_id == current_user.id:
         file_request.status = new_status
+    
+        if new_status == 'accepted':
+            # Retrieve and process the symmetric key
+            owner = User.query.get(current_user.id)
+            requester = User.query.get(file_request.requester_id)
+            symmetric_key = owner.symmetric_key
+            decrypted_key = decrypt(symmetric_key, owner.private_key)
+            print(decrypted_key)
+            re_encrypted_key = encrypt(decrypted_key, requester.public_key)  # requester's public key
+
+            # Send the re-encrypted key to the requester
+            subject = "File Access Key"
+            body = f"Dear {requester.username},\n\nYour request for file {file_request.file.filename} has been accepted. Please find the access key attached.\n\nKey: {re_encrypted_key}\n\nBest regards,\nYour Application Team"
+            message = CreateMessage(owner.email, requester.email, subject, body.encode('utf-8'))
+            SendMessage(service, 'me', message)
         db.session.commit()
         return redirect(url_for('manage_requests'))
     return 'Invalid Request', 400
+
 
 @api.route('/manage_requests', methods=['GET'])
 @login_required

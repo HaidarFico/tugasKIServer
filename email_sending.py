@@ -8,6 +8,7 @@ from email.mime.text import MIMEText
 import base64
 
 from googleapiclient import discovery
+from googleapiclient import errors
 import oauth2client
 from oauth2client import client
 from oauth2client import tools
@@ -87,12 +88,13 @@ def SendMessage(service, user_id, message):
     Sent Message.
   """
   try:
-    message = (service.users().messages().send(userId=user_id, body=message)
-               .execute())
-    print (f'Message Id: %s' % message['id'])
-    return message
-  except errors.HttpError:
-    print (f'An error occurred: %s' % error)
+      message = (service.users().messages().send(userId=user_id, body=message)
+                   .execute())
+      print(f'Message Id: {message["id"]}')
+      return message
+  except errors.HttpError as error:
+        print(f'An error occurred: {error}')
+
 
 def main():
     credentials = get_credentials()
