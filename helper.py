@@ -1,7 +1,11 @@
 from rsa_code import *
 from Crypto import Random
+
 from email_sending import *
 from algorithm import *
+
+import os
+
 
 def createKeys():
     privateKey = generate_key_str()
