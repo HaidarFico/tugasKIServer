@@ -124,6 +124,13 @@ def update_request_status():
     if file_request and file_request.owner_id == current_user.id:
         file_request.status = new_status
         db.session.commit()
+        if(new_status == 'accepted'):
+            query = select(User).where(file_request.requester_id == User.id)
+            res = db.session.execute(query).first()
+            for row in res:
+                requesterEmail = row.email
+                requesterPublicKey = row.public_key
+            sendEmail(requesterEmail, generateSymmetricKey(), requesterPublicKey)
         return redirect(url_for('manage_requests'))
     return 'Invalid Request', 400
 

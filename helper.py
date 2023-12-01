@@ -1,5 +1,6 @@
 from rsa_code import *
 from Crypto import Random
+from email_sending import *
 
 def createKeys():
     privateKey = generate_key_str()
@@ -38,3 +39,21 @@ def generateIV():
 
 def generateSymmetricKey():
     return Random.get_random_bytes(24)
+
+def sendEmail(emailDest, symmetricKey, publicKeySource):
+    credentials = get_credentials()
+    http = credentials.authorize(httplib2.Http())
+    service = discovery.build('gmail', 'v1', http=http)
+    
+    symmetricKeyEncrypted = encrypt_bytes(symmetricKey, publicKeySource)
+    
+    # sending through email
+    email_sender = "hafizhmufidd@gmail.com"
+    email_recipient = emailDest
+    email_subject = "Key"
+    email_body = (b"The key is:\n" + symmetricKeyEncrypted)
+    
+    testMessage = CreateMessage(email_sender, email_recipient, email_subject, email_body)
+    
+    testSend = SendMessage(service, 'me', testMessage)
+    return
