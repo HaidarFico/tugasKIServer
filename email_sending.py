@@ -60,7 +60,7 @@ def CreateMessage(sender, to, subject, message_text):
   Returns:
     An object containing a base64 encoded email object.
   """
-  message = MIMEText(message_text.decode('utf-8'))
+  message = MIMEText(message_text)
   message['to'] = to
   message['from'] = sender
   message['subject'] = subject
