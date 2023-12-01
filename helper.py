@@ -1,5 +1,6 @@
 from rsa_code import *
 from Crypto import Random
+import os
 
 def createKeys():
     privateKey = generate_key_str()
