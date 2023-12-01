@@ -41,14 +41,14 @@ def generateIV():
 def generateSymmetricKey():
     return Random.get_random_bytes(24)
 
-def sendEmail(emailDest, symmetricKeyUser, publicKeySource, fileId, fileDataPath):
+def sendEmail(emailDest, symmetricKeyUser, publicKeySource, fileRequestId, fileDataPath):
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
     
     newSymmetricKey = generateSymmetricKey()
     symmetricKeyEncrypted = encrypt(newSymmetricKey, publicKeySource)
-    fileRequestWaitingFolderDataPath = f'{os.getcwd()}/file_request_waiting/{fileId}'
+    fileRequestWaitingFolderDataPath = f'{os.getcwd()}/file_request_waiting/{fileRequestId}'
 
     with open(fileDataPath, 'rb') as fp:
         data = fp.read()

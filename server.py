@@ -124,6 +124,7 @@ def update_request_status():
     if file_request and file_request.owner_id == current_user.id:
         file_request.status = new_status
         file_id = file_request.file_id
+        file_request_id = file_request.id
         filePath = f'{os.getcwd()}/files/{file_id}'
         db.session.commit()
         if(new_status == 'accepted'):
@@ -134,7 +135,7 @@ def update_request_status():
                 requesterPublicKey = row.public_key
                 # requesterSymmetricKeyEncrypted = row.symmetric_key
 
-            sendEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey, file_id, filePath)
+            sendEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey, file_request_id, filePath)
         return redirect(url_for('manage_requests'))
     return 'Invalid Request', 400
 
