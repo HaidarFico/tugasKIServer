@@ -1,27 +1,19 @@
 from server import *
 from algorithm import *
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, json, request, send_file
 from flask_mysqldb import MySQL
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.hazmat.primitives.ciphers import Cipher, modes
 from cryptography.fernet import Fernet
 import base64
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from flask import json, jsonify, request, send_file, render_template, url_for, redirect
-from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Column, Integer, ForeignKey, MetaData, String
-from algorithm import pre_decrypt, encrypt_data_cbc
 from form import *
 from init import *
 import json
 from Crypto import Random
 from rsa_code import *
+from helper import *
 
 app = Flask(__name__)
 
@@ -42,7 +34,6 @@ email_config = {
 def send_email(subject, body, to_email, encrypted_file, encrypted_symmetric_key):
     pass
 
-
 # Function to load keys from the database
 def load_keys(user_id):
     cur = mysql.connection.cursor()
@@ -61,7 +52,10 @@ def load_email_receiver(user_id):
 
 # Function to generate a new symmetric key
 def generate_symmetric_key():
-    return Fernet.generate_key()
+    key = Fernet.generate_key()
+    while len(key) != 24:
+        key = Fernet.generate_key()
+    return key
 
 
 @app.route('/request_access', methods=['POST'])
@@ -88,10 +82,10 @@ def request_access():
         connection.close()
         return jsonify({'error': 'User A not found'}), 404
 
-    user_a_email = load_email_receiver(user_a_id)
+    # user_a_email = load_email_receiver(user_a_id)
     
     # Fetch the file content from the database based on the file identifier
-    cursor.execute("SELECT filename FROM files WHERE id = %s", (file_id,))
+    cursor.execute("SELECT filename, file_extension FROM files WHERE id = %s", (file_id,))
     file_data = cursor.fetchone()
 
     if not file_data:
@@ -99,16 +93,21 @@ def request_access():
         connection.close()
         return jsonify({'error': 'File not found'}), 404
 
-    file_content = file_data[0]
+    filename, file_extension = file_data  # Corrected unpacking
 
-    print(f"Length of file_content: {len(file_content)}")  # Print the length for debugging
+    print(f"Filename: {filename}, File extension: {file_extension}")
 
     public_key_b, private_key_b, symmetric_key_b = user_b_data
     public_key_a, private_key_a, symmetric_key_a = user_a_data
 
     # Decrypt the file using user B's symmetric key
     try:
-        decrypted_file = decrypt(file_content, public_key_b)
+        file_data_path = os.path.join(FILE_DATA_FILE_PATH, f'{filename}.{file_extension}')
+        with open(file_data_path, "rb") as fo:
+            encrypted_file = fo.read()
+            real_symmetric_key = decrypt_bytes(symmetric_key_b, private_key_b)
+            decrypted_file = decrypt_data_cbc_file(encrypted_file, real_symmetric_key)
+
     except Exception as e:
         print(f"Error during decryption: {e}")
         return jsonify({'error': 'Error during decryption'}), 500
@@ -116,20 +115,21 @@ def request_access():
     # Generate a new symmetric key for encrypting the file for user A
     new_symmetric_key = generate_symmetric_key()  
 
+    data_to_encrypt = decrypted_file
+    iv = os.urandom(8)
+
     # Encrypt the file with the new symmetric key
-    encrypted_file_for_a = encrypt(decrypted_file, new_symmetric_key)
+    encrypted_file_for_a = encrypt_data_cbc_file(data_to_encrypt, iv, new_symmetric_key)
 
     # Encrypt the new symmetric key with user A's public key
-    encrypted_symmetric_key_for_a = encrypt(new_symmetric_key, public_key_a)
-
-    # Send the encrypted file and key to user A's email
-    subject = 'File Access Request'
-    body = f'The encrypted file and symmetric key are attached. Please find the attached file and key.'
-
-    send_email(subject, body, user_a_email, encrypted_file_for_a, encrypted_symmetric_key_for_a)
+    encrypted_symmetric_key_for_a = encrypt_data_cbc(new_symmetric_key, getSymmetricKey(user_a_id, db))
 
     cursor.close()
     connection.close()
+
+    # checkings
+    print(encrypted_file_for_a)
+    print(encrypted_symmetric_key_for_a)
 
     return jsonify({'message': 'File and key sent to User A successfully'})
 
