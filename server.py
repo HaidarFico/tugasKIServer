@@ -240,23 +240,24 @@ def postFiles():
     return redirect('/dashboard')
 
 @api.route('/download_requested_file', methods=['POST'])
-def downloadRequestFile():
-    request_id = request.form.get('request_id')
-    file_request = FileRequest.query.get(request_id)
-
-    if not file_request or file_request.requester_id != current_user.id:
-        return 'Invalid Request', 400
+def download_requested_file():
+    file_id = request.form.get('file_id')
+    query = select(FileRequest).where(FileRequest.file_id == file_id)
+    res = db.session.execute(query).first()
+    for row in res:
+        file_request = row
+    print("HUWEFIOFHJIOWEJFIOWEJIOWE")
+    print(file_request)
+    # if not file_request or file_request.requester_id != current_user.id:
+    #     return 'Invalid Request', 400
 
     file_metadata = files.query.get(file_request.file_id)
-    fileDataFolderPath = "file_request" + '/'
+    fileDataFolderPath = "file_request_waiting" + '/'
     filePathDir = fileDataFolderPath + str(file_metadata.id)
     fileDataPath = "file_request" + '/' + f'{file_metadata.filename}.{file_metadata.file_extension}'
 
-    with open(filePathDir, "rb") as file_to_download:
-        with open(fileDataPath, "wb") as file_for_download:
-            file_for_download.write(file_to_download.read())
+    return send_file(filePathDir, as_attachment=True)
 
-    return send_file(fileDataPath, as_attachment=True)
 @api.route('/downloadFile', methods=['POST'])
 def downloadFile():
     filesMetadata = dict()
