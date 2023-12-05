@@ -22,6 +22,8 @@ def flaskInit():
 
     api.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER')
     api.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+    SECRET_KEY = os.getenv('SECRET_KEY').encode()
+
     api.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('SQLALCHEMY_DATABASE_URI')
     db = SQLAlchemy(api)
     metadata_obj = MetaData()
@@ -48,7 +50,6 @@ def flaskInit():
         os.mkdir(TEMP_FILE_FILE_PATH)
     if (not os.path.isdir(FILE_DATA_FILE_PATH)):
         os.mkdir(FILE_DATA_FILE_PATH)
-
     return {
         'api': api,
         'bcrypt': bcrypt,
@@ -60,5 +61,6 @@ def flaskInit():
         'TEMP_FILE_FILE_PATH': TEMP_FILE_FILE_PATH,
         'FILE_DATA_FILE_PATH': FILE_DATA_FILE_PATH,
         'FILE_DATA_FOLDER_NAME': FILE_DATA_FOLDER_NAME,
-        'TEMP_FILE_FOLDER_NAME': TEMP_FILE_FOLDER_NAME
+        'TEMP_FILE_FOLDER_NAME': TEMP_FILE_FOLDER_NAME,
+        'SECRET_KEY': SECRET_KEY
     }

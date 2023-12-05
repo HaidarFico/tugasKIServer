@@ -2,7 +2,7 @@ from flask import json, jsonify, request, send_file, render_template, url_for, r
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Column, Integer, ForeignKey, MetaData, String, select, Table
+from sqlalchemy import Column, Integer, ForeignKey, MetaData, String, select, Table, LargeBinary
 from algorithm import *
 from form import *
 from init import *
@@ -22,6 +22,7 @@ TEMP_FILE_FILE_PATH = initRes.get('TEMP_FILE_FILE_PATH')
 FILE_DATA_FILE_PATH = initRes.get('FILE_DATA_FILE_PATH')
 FILE_DATA_FOLDER_NAME = initRes.get('FILE_DATA_FOLDER_NAME')
 TEMP_FILE_FOLDER_NAME = initRes.get('TEMP_FILE_FOLDER_NAME')
+SECRET_KEY = initRes.get('SECRET_KEY')
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -107,7 +108,7 @@ def register():
     form = RegisterForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data)
-        keys = createKeys()
+        keys = createKeys(SECRET_KEY)
         new_user = User(username=form.username.data, password=hashed_password, email=form.email.data, public_key=keys.get('publicKey'), private_key=keys.get('privateKey'), symmetric_key=keys.get('symmetricKeyEncrypted'))
         db.session.add(new_user)
         db.session.commit()
@@ -299,16 +300,18 @@ def getSymmetricKey(userId, db):
     res = db.session.execute(query).first()
 
     for row in res:
-        userDict['private_key'] = row.private_key
+        userDict['private_key_encrypted'] = row.private_key
         userDict['symmetric_key'] = row.symmetric_key
 
-    return decrypt_bytes(userDict['symmetric_key'], userDict['private_key'])
+    privateKey = decrypt_data_cbc(userDict['private_key'], SECRET_KEY)
+    return decrypt_bytes(userDict['symmetric_key'], privateKey)
 
 def getPrivateKey(userId, db):
     query = select(User).where(User.id == userId)
     res = db.session.execute(query).first()
 
     for row in res:
-        privateKey = row.private_key
+        privateKeyEncrypted = row.private_key
 
+    privateKey = decrypt_data_cbc(privateKeyEncrypted, SECRET_KEY)
     return privateKey

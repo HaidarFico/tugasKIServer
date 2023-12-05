@@ -7,13 +7,15 @@ from algorithm import *
 import os
 
 
-def createKeys():
-    privateKey = generate_key_str()
-    publicKey = public_key_str(privateKey)
-    symmetricKeyEncrypted = encrypt(Random.get_random_bytes(24), publicKey)
+def createKeys(secretKey):
+    keyPairs = generate_key()
+    privateKeyEncrypted = encrypt_data_cbc_file(keyPairs.get('private_key'), generateIV(), secretKey)
+    publicKeyEncrypted = encrypt_data_cbc_file(keyPairs.get('public_key'), generateIV(), secretKey)
+    symmetricKeyEncrypted = encrypt_bytes(Random.get_random_bytes(24), keyPairs.get('public_key'))
+
     return {
-        'privateKey': privateKey,
-        'publicKey': publicKey,
+        'privateKey': privateKeyEncrypted,
+        'publicKey': publicKeyEncrypted,
         'symmetricKeyEncrypted': symmetricKeyEncrypted
     }
 
@@ -62,7 +64,7 @@ def sendEmail(emailDest, symmetricKeyUser, publicKeySource, fileRequestId, fileD
             wp.write(dataEncrypted)
 
     # sending through email
-    email_sender = "hafizhmufidd@gmail.com"
+    email_sender = "haidarficoi@gmail.com"
     email_recipient = emailDest
     email_subject = "Key"
     email_body = (f"The key is:\n" + symmetricKeyEncrypted)
