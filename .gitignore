@@ -2,3 +2,4 @@ __pycache__/*
 .env
 *.enc
 /myenv/
+credentials.json
