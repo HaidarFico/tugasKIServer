@@ -47,13 +47,15 @@ def generateIV():
 def generateSymmetricKey():
     return Random.get_random_bytes(24)
 
-def sendEmail(emailDest, symmetricKeyUser, publicKeySource, fileRequestId, fileDataPath):
+def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncrypted, fileRequestId, fileDataPath, appSecretKey):
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
     
     newSymmetricKey = generateSymmetricKey()
-    symmetricKeyEncrypted = encrypt(newSymmetricKey, publicKeySource)
+
+    publicKeySource = decrypt_data_cbc_file(publicKeySourceEncrypted, appSecretKey)
+    symmetricKeyEncrypted = encrypt_bytes(newSymmetricKey, publicKeySource)
     fileRequestWaitingFolderDataPath = f'{os.getcwd()}/file_request_waiting/{fileRequestId}'
 
     with open(fileDataPath, 'rb') as fp:
@@ -67,9 +69,9 @@ def sendEmail(emailDest, symmetricKeyUser, publicKeySource, fileRequestId, fileD
     email_sender = "haidarficoi@gmail.com"
     email_recipient = emailDest
     email_subject = "Key"
-    email_body = (f"The key is:\n" + symmetricKeyEncrypted)
+    email_body = (f"The key is attached to the file, please decrypt it with your private key:\n")
     
-    testMessage = CreateMessage(email_sender, email_recipient, email_subject, email_body)
+    testMessage = CreateMessageWithFile(email_sender, email_recipient, email_subject, email_body, symmetricKeyEncrypted, 'symmetricKeyEncrypted.enc')
     
-    testSend = SendMessage(service, 'me', testMessage)
+    SendMessage(service, 'me', testMessage)
     return

@@ -9,6 +9,7 @@ from init import *
 import json
 from Crypto import Random
 from helper import *
+import io
 
 initRes = flaskInit()
 api = initRes.get('api')
@@ -34,9 +35,9 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(20), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
     email = db.Column(db.String(100))
-    public_key = db.Column(db.String(3000), nullable=False)
-    private_key = db.Column(db.String(3000), nullable=False)
-    symmetric_key = db.Column(db.String(3000), nullable=False)
+    public_key = db.Column(db.LargeBinary(3000), nullable=False)
+    private_key = db.Column(db.LargeBinary(3000), nullable=False)
+    symmetric_key = db.Column(db.LargeBinary(3000), nullable=False)
 
 class files(db.Model):
     id = db.Column(Integer, primary_key=True, autoincrement=True)
@@ -136,7 +137,7 @@ def update_request_status():
                 requesterPublicKey = row.public_key
                 # requesterSymmetricKeyEncrypted = row.symmetric_key
 
-            sendEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey, file_request_id, filePath)
+            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey, file_request_id, filePath, SECRET_KEY)
         return redirect(url_for('manage_requests'))
     return 'Invalid Request', 400
 
@@ -247,17 +248,16 @@ def download_requested_file():
     res = db.session.execute(query).first()
     for row in res:
         file_request = row
-    print("HUWEFIOFHJIOWEJFIOWEJIOWE")
-    print(file_request)
+    print(file_request.id)
     # if not file_request or file_request.requester_id != current_user.id:
     #     return 'Invalid Request', 400
 
     file_metadata = files.query.get(file_request.file_id)
     fileDataFolderPath = "file_request_waiting" + '/'
-    filePathDir = fileDataFolderPath + str(file_metadata.id)
+    filePathDir = fileDataFolderPath + str(file_request.id)
     fileDataPath = "file_request" + '/' + f'{file_metadata.filename}.{file_metadata.file_extension}'
 
-    return send_file(filePathDir, as_attachment=True)
+    return send_file(filePathDir, as_attachment=True, download_name= f'{file_metadata.filename}.{file_metadata.file_extension}.enc')
 
 @api.route('/downloadFile', methods=['POST'])
 def downloadFile():
@@ -277,15 +277,17 @@ def downloadFile():
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
             decryptFile = decrypt_data_cbc_file(encryptFile, getSymmetricKey(current_user.get_id(), db))
-            with open(fileDataPath, "wb") as fr:
-                fr.write(decryptFile)
-                return send_file(fileDataPath, as_attachment=True)
+            return send_file(io.BytesIO(decryptFile), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
     return redirect('/manage_requests')
     
+@api.route('/privateKeyPage', methods=['GET'])
+def privateKeyPage():
+    return render_template('private_key.html')
+
 @api.route('/getPrivateKey', methods=['GET'])
 def getPrivateKey():
     privateKey = getPrivateKey(current_user.get_id(), db)
-    return render_template('private_key.html', privateKey= privateKey)
+    return send_file(io.BytesIO(privateKey), as_attachment=True, download_name='private_key.pem')
 
 
 @api.route('/test', methods=['GET'])
@@ -295,16 +297,14 @@ def test() -> json:
     })
 
 def getSymmetricKey(userId, db):
-    userDict = dict()
     query = select(User).where(User.id == userId)
     res = db.session.execute(query).first()
 
     for row in res:
-        userDict['private_key_encrypted'] = row.private_key
-        userDict['symmetric_key'] = row.symmetric_key
+        symmetric_key = row.symmetric_key
 
-    privateKey = decrypt_data_cbc(userDict['private_key'], SECRET_KEY)
-    return decrypt_bytes(userDict['symmetric_key'], privateKey)
+    privateKey = getPrivateKey(userId, db)
+    return decrypt_bytes(symmetric_key, privateKey)
 
 def getPrivateKey(userId, db):
     query = select(User).where(User.id == userId)
@@ -313,5 +313,5 @@ def getPrivateKey(userId, db):
     for row in res:
         privateKeyEncrypted = row.private_key
 
-    privateKey = decrypt_data_cbc(privateKeyEncrypted, SECRET_KEY)
+    privateKey = decrypt_data_cbc_file(privateKeyEncrypted, SECRET_KEY)
     return privateKey

@@ -4,6 +4,9 @@ from httplib2 import Http
 from rsa_code import *
 
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 import base64
 
@@ -64,6 +67,39 @@ def CreateMessage(sender, to, subject, message_text):
   message['to'] = to
   message['from'] = sender
   message['subject'] = subject
+  return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')}
+
+'''
+testMessage = CreateMessage('@gmail.com', 
+                            '@gmail.com', 
+                            'Testing', 
+                            b'I just wanna be your everything by Andy Gibb')
+print("Test Message:", testMessage)
+'''
+
+def CreateMessageWithFile(sender, to, subject, message_text, fileBytes, filename):
+  """Create a message for an email.
+
+  Args:
+    sender: Email address of the sender.
+    to: Email address of the receiver.
+    subject: The subject of the email message.
+    message_text: The text of the email message.
+
+  Returns:
+    An object containing a base64 encoded email object.
+  """
+  message = MIMEMultipart(message_text)
+  message['to'] = to
+  message['from'] = sender
+  message['subject'] = subject
+
+  attachment_package = MIMEBase('application', 'octet-stream')
+  attachment_package.set_payload(fileBytes)
+  encoders.encode_base64(attachment_package)
+  attachment_package.add_header('Content-Disposition', 'attachment; filename= ' + filename)
+  message.attach(attachment_package)  
+
   return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')}
 
 '''
