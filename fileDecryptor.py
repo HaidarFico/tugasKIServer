@@ -42,7 +42,7 @@ if __name__ == '__main__':
         unpadder = PKCS7(64).unpadder()  # Use the same block size (64) as during encryption
         original_data = unpadder.update(decrypted_data) + unpadder.finalize()
         
-        with open(f'{os.getcwd()}/decrypted', 'wb') as fp:
+        with open(f'{os.getcwd()}/{sys.argv[3]}', 'wb') as fp:
             fp.write(original_data)
     except Exception as e:
         print({"error": str(e)})
