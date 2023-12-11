@@ -2,13 +2,14 @@ from flask import json, jsonify, request, send_file, render_template, url_for, r
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_mysqldb import MySQL
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Column, Integer, ForeignKey, MetaData, String, select, Table
+from sqlalchemy import Column, Integer, ForeignKey, MetaData, String, select, Table, LargeBinary
 from algorithm import *
 from form import *
 from init import *
 import json
 from Crypto import Random
 from helper import *
+import io
 
 initRes = flaskInit()
 api = initRes.get('api')
@@ -22,6 +23,7 @@ TEMP_FILE_FILE_PATH = initRes.get('TEMP_FILE_FILE_PATH')
 FILE_DATA_FILE_PATH = initRes.get('FILE_DATA_FILE_PATH')
 FILE_DATA_FOLDER_NAME = initRes.get('FILE_DATA_FOLDER_NAME')
 TEMP_FILE_FOLDER_NAME = initRes.get('TEMP_FILE_FOLDER_NAME')
+SECRET_KEY = initRes.get('SECRET_KEY')
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -33,9 +35,9 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(20), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
     email = db.Column(db.String(100))
-    public_key = db.Column(db.String(3000), nullable=False)
-    private_key = db.Column(db.String(3000), nullable=False)
-    symmetric_key = db.Column(db.String(3000), nullable=False)
+    public_key = db.Column(db.LargeBinary(3000), nullable=False)
+    private_key = db.Column(db.LargeBinary(3000), nullable=False)
+    symmetric_key = db.Column(db.LargeBinary(3000), nullable=False)
 
 class files(db.Model):
     id = db.Column(Integer, primary_key=True, autoincrement=True)
@@ -58,6 +60,13 @@ class FileRequest(db.Model):
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     status = db.Column(db.String(50), nullable=False, default='pending')
     file = db.relationship('files', backref=db.backref('requests', lazy=True))
+    requester = db.relationship('User', foreign_keys=[requester_id])
+
+class PrivateDataRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    requester_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(50), nullable=False, default='pending')
     requester = db.relationship('User', foreign_keys=[requester_id])
 
 
@@ -107,7 +116,7 @@ def register():
     form = RegisterForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data)
-        keys = createKeys()
+        keys = createKeys(SECRET_KEY)
         new_user = User(username=form.username.data, password=hashed_password, email=form.email.data, public_key=keys.get('publicKey'), private_key=keys.get('privateKey'), symmetric_key=keys.get('symmetricKeyEncrypted'))
         db.session.add(new_user)
         db.session.commit()
@@ -123,7 +132,19 @@ def update_request_status():
     file_request = FileRequest.query.get(request_id)
     if file_request and file_request.owner_id == current_user.id:
         file_request.status = new_status
+        file_id = file_request.file_id
+        file_request_id = file_request.id
+        filePath = f'{os.getcwd()}/files/{file_id}'
         db.session.commit()
+        if(new_status == 'accepted'):
+            query = select(User).where(file_request.requester_id == User.id)
+            res = db.session.execute(query).first()
+            for row in res:
+                requesterEmail = row.email
+                requesterPublicKey = row.public_key
+
+            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey,
+                                         file_request_id, filePath, 'file_request_waiting', SECRET_KEY)
         return redirect(url_for('manage_requests'))
     return 'Invalid Request', 400
 
@@ -136,6 +157,96 @@ def manage_requests():
         .filter(files.user_id == current_user.id).all()
 
     return render_template('manage_request.html', requests=incoming_requests)
+
+@api.route('/list_private_data', methods=['GET'])
+@login_required
+def list_private_data():
+    # Get all users except current user
+    query = select(User).where(User.id != current_user.get_id())
+    res = db.session.execute(query).all()
+
+    userArray = []
+    for row in res:
+        userArray.append(row[0])
+
+    # Get all private data requests that the user has sent
+    query = select(PrivateDataRequest).where(PrivateDataRequest.requester_id == current_user.get_id())
+    res = db.session.execute(query).all()
+
+    privateDataRequestArray = []
+    for row in res:
+        privateDataRequestArray.append(row[0])
+
+    # Bind the private data requests to the user in a dict. 
+    # The dict has the key of the user obj and the value of the privateDataRequest
+    dataRequestsDict = {}
+    for user in userArray:
+        dataRequestsDict[user] = None
+        for privateDataRequest in privateDataRequestArray:
+            if user.id == privateDataRequest.owner_id:
+                dataRequestsDict[user] = privateDataRequest
+    
+    return render_template('request_private_data.html', dataRequestDict=dataRequestsDict)
+
+@api.route('/request_private_data', methods=['POST'])
+@login_required
+def request_private_data():
+    owner_id = request.form.get('owner_id')
+    new_request = PrivateDataRequest(
+        requester_id = current_user.get_id(),
+        owner_id = owner_id,
+        status = 'waiting confirmation'
+    )
+    db.session.add(new_request)
+    db.session.commit()
+    return redirect(url_for('list_private_data'))
+
+@api.route('/manage_private_data_requests', methods=['GET'])
+@login_required
+def manage_private_data_requests():
+    # Get all private data requests that the user has gotten
+    query = select(PrivateDataRequest).where(PrivateDataRequest.owner_id == current_user.get_id())
+    res = db.session.execute(query).all()
+
+    privateDataRequestArray = []
+    for row in res:
+        privateDataRequestArray.append(row[0])
+
+    return render_template('manage_private_data.html', privateDataRequests=privateDataRequestArray)
+
+@api.route('/update_private_data_request_status', methods=['POST'])
+@login_required
+def update_private_data_request_status():
+    request_id = request.form.get('request_id')
+    new_status = request.form.get('status')  # accepted or declined
+
+    # Update the privateDataRequest status
+    privateDataRequest = PrivateDataRequest.query.get(request_id)
+    privateDataRequest.status = new_status
+    db.session.commit()
+
+    # send the email
+    if new_status == 'accepted':
+            requestFileWaitingFilePath = f'{os.getcwd()}/private_data/{privateDataRequest.owner_id}.enc'
+            query = select(User).where(privateDataRequest.requester_id == User.id)
+            res = db.session.execute(query).first()
+            for row in res:
+                requesterEmail = row.email
+                requesterPublicKey = row.public_key
+            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), 
+                                                   requesterPublicKey, request_id, requestFileWaitingFilePath, 'private_data_request_waiting',SECRET_KEY)
+    return redirect(url_for('manage_private_data_requests'))
+
+@api.route('/download_requested_private_data', methods=['POST'])
+@login_required
+def download_requested_private_data():
+    request_id = request.form.get('request_id')
+    privateDataRequest = PrivateDataRequest.query.get(request_id)
+
+    fileDataPath = "private_data_request_waiting" + '/' + f'{privateDataRequest.owner_id}'
+
+    return send_file(fileDataPath, as_attachment=True, download_name= f'{privateDataRequest.owner_id}.enc')
+
 @api.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():
@@ -227,6 +338,20 @@ def postFiles():
 
     return redirect('/dashboard')
 
+@api.route('/download_requested_file', methods=['POST'])
+def download_requested_file():
+    file_id = request.form.get('file_id')
+    query = select(FileRequest).where(FileRequest.file_id == file_id)
+    res = db.session.execute(query).first()
+    for row in res:
+        file_request = row
+
+    file_metadata = files.query.get(file_request.file_id)
+    fileDataFolderPath = "file_request_waiting" + '/'
+    filePathDir = fileDataFolderPath + str(file_request.id)
+
+    return send_file(filePathDir, as_attachment=True, download_name= f'{file_metadata.filename}.{file_metadata.file_extension}.enc')
+
 @api.route('/downloadFile', methods=['POST'])
 def downloadFile():
     filesMetadata = dict()
@@ -245,12 +370,18 @@ def downloadFile():
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
             decryptFile = decrypt_data_cbc_file(encryptFile, getSymmetricKey(current_user.get_id(), db))
-            with open(fileDataPath, "wb") as fr:
-                fr.write(decryptFile)
-                return send_file(fileDataPath, as_attachment=True)
-
-    return redirect('/dashboard')
+            return send_file(io.BytesIO(decryptFile), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
+    return redirect('/manage_requests')
     
+@api.route('/privateKeyPage', methods=['GET'])
+def privateKeyPage():
+    return render_template('private_key.html')
+
+@api.route('/getPrivateKey', methods=['GET'])
+def getPrivateKey():
+    privateKey = getPrivateKey(current_user.get_id(), db)
+    return send_file(io.BytesIO(privateKey), as_attachment=True, download_name='private_key.pem')
+
 
 @api.route('/test', methods=['GET'])
 def test() -> json:
@@ -259,12 +390,21 @@ def test() -> json:
     })
 
 def getSymmetricKey(userId, db):
-    userDict = dict()
     query = select(User).where(User.id == userId)
     res = db.session.execute(query).first()
 
     for row in res:
-        userDict['private_key'] = row.private_key
-        userDict['symmetric_key'] = row.symmetric_key
+        symmetric_key = row.symmetric_key
 
-    return decrypt_bytes(userDict['symmetric_key'], userDict['private_key'])
+    privateKey = getPrivateKey(userId, db)
+    return decrypt_bytes(symmetric_key, privateKey)
+
+def getPrivateKey(userId, db):
+    query = select(User).where(User.id == userId)
+    res = db.session.execute(query).first()
+
+    for row in res:
+        privateKeyEncrypted = row.private_key
+
+    privateKey = decrypt_data_cbc_file(privateKeyEncrypted, SECRET_KEY)
+    return privateKey

@@ -11,14 +11,18 @@
             <th>File Name</th>
             <th>Owner</th>
             <th>Status/Action</th>
-
         </tr>
         {% for file in files %}
         <tr>
             <td>{{ file.filename }}</td>
             <td>{{ file.username }}</td>
             <td>
-                {% if file.status == 'not requested' %}
+                {% if file.status == 'accepted' %}
+                    <form action="{{ 'download_requested_file' }}" method="post">
+                        <input type="hidden" name="file_id" value="{{ file.id }}">
+                        <button type="submit">Download File</button>
+                    </form>
+                {% elif file.status == 'not requested' %}
                     <form action="{{ url_for('request_file') }}" method="post">
                         <input type="hidden" name="file_id" value="{{ file.id }}">
                         <button type="submit">Request File</button>

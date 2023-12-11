@@ -4,8 +4,13 @@ from httplib2 import Http
 from rsa_code import *
 
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 import base64
+from googleapiclient.errors import HttpError
+
 
 from googleapiclient import discovery
 import oauth2client
@@ -60,10 +65,43 @@ def CreateMessage(sender, to, subject, message_text):
   Returns:
     An object containing a base64 encoded email object.
   """
-  message = MIMEText(message_text.decode('utf-8'))
+  message = MIMEText(message_text)
   message['to'] = to
   message['from'] = sender
   message['subject'] = subject
+  return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')}
+
+'''
+testMessage = CreateMessage('@gmail.com', 
+                            '@gmail.com', 
+                            'Testing', 
+                            b'I just wanna be your everything by Andy Gibb')
+print("Test Message:", testMessage)
+'''
+
+def CreateMessageWithFile(sender, to, subject, message_text, fileBytes, filename):
+  """Create a message for an email.
+
+  Args:
+    sender: Email address of the sender.
+    to: Email address of the receiver.
+    subject: The subject of the email message.
+    message_text: The text of the email message.
+
+  Returns:
+    An object containing a base64 encoded email object.
+  """
+  message = MIMEMultipart(message_text)
+  message['to'] = to
+  message['from'] = sender
+  message['subject'] = subject
+
+  attachment_package = MIMEBase('application', 'octet-stream')
+  attachment_package.set_payload(fileBytes)
+  encoders.encode_base64(attachment_package)
+  attachment_package.add_header('Content-Disposition', 'attachment; filename= ' + filename)
+  message.attach(attachment_package)  
+
   return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')}
 
 '''
@@ -91,45 +129,5 @@ def SendMessage(service, user_id, message):
                .execute())
     print (f'Message Id: %s' % message['id'])
     return message
-  except errors.HttpError:
-    print (f'An error occurred: %s' % error)
-
-def main():
-    credentials = get_credentials()
-    http = credentials.authorize(httplib2.Http())
-    service = discovery.build('gmail', 'v1', http=http)
-    
-    # generate requesting user's private key
-    key = generate_key_str();
-    print("Private key (string form):\n");
-    print(key)
-    
-    # generate requesting user's public key 
-    public_key = public_key_str(key)
-    print("Public key (string form):\n")
-    print(public_key)
-    
-    # encrypt the symmetric key with requesting user's public key
-    symmetric_key = b"Aston Martin DBS 1970" # bytes, if string will error can't concat str to bytes
-    encrypted_key = encrypt(symmetric_key, public_key)
-    print("Encrypted symm. key with public key:\n")
-    print(encrypted_key)
-    
-    # decrypt the encrypted symmetric key with requesting user's private key
-    decrypted_key = decrypt(encrypted_key, key)
-    print("Decrypted symm. key with private key:\n")
-    print(decrypted_key)
-    
-    # sending through email
-    email_sender = "sh.g3nsh1nn3r+1@gmail.com"
-    email_recipient = "sh.g3nsh1nn3r+2@gmail.com"
-    email_subject = "Testing"
-    email_body = (b"The key is:\n" + encrypted_key.encode('utf-8'))
-    
-    testMessage = CreateMessage(email_sender, email_recipient, email_subject, email_body)
-    
-    testSend = SendMessage(service, 'me', testMessage)
-    
-
-if __name__ == '__main__':
-   main()
+  except HttpError:
+    print (f'An error occurred: %s' % HttpError)

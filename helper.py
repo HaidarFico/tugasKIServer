@@ -1,13 +1,21 @@
 from rsa_code import *
 from Crypto import Random
 
-def createKeys():
-    privateKey = generate_key_str()
-    publicKey = public_key_str(privateKey)
-    symmetricKeyEncrypted = encrypt(Random.get_random_bytes(24), publicKey)
+from email_sending import *
+from algorithm import *
+
+import os
+
+
+def createKeys(secretKey):
+    keyPairs = generate_key()
+    privateKeyEncrypted = encrypt_data_cbc_file(keyPairs.get('private_key'), generateIV(), secretKey)
+    publicKeyEncrypted = encrypt_data_cbc_file(keyPairs.get('public_key'), generateIV(), secretKey)
+    symmetricKeyEncrypted = encrypt_bytes(Random.get_random_bytes(24), keyPairs.get('public_key'))
+
     return {
-        'privateKey': privateKey,
-        'publicKey': publicKey,
+        'privateKey': privateKeyEncrypted,
+        'publicKey': publicKeyEncrypted,
         'symmetricKeyEncrypted': symmetricKeyEncrypted
     }
 
@@ -38,3 +46,32 @@ def generateIV():
 
 def generateSymmetricKey():
     return Random.get_random_bytes(24)
+
+def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncrypted, fileRequestId, fileDataPath, fileDestFolder, appSecretKey):
+    credentials = get_credentials()
+    http = credentials.authorize(httplib2.Http())
+    service = discovery.build('gmail', 'v1', http=http)
+    
+    newSymmetricKey = generateSymmetricKey()
+
+    publicKeySource = decrypt_data_cbc_file(publicKeySourceEncrypted, appSecretKey)
+    symmetricKeyEncrypted = encrypt_bytes(newSymmetricKey, publicKeySource)
+    fileRequestWaitingFolderDataPath = f'{os.getcwd()}/{fileDestFolder}/{fileRequestId}'
+
+    with open(fileDataPath, 'rb') as fp:
+        data = fp.read()
+        dataDecrypted = decrypt_data_cbc_file(data, symmetricKeyUser)   
+        dataEncrypted = encrypt_data_cbc_file(dataDecrypted, generateIV(), newSymmetricKey)
+        with open(fileRequestWaitingFolderDataPath, 'wb') as wp:
+            wp.write(dataEncrypted)
+
+    # sending through email
+    email_sender = "haidarficoi@gmail.com"
+    email_recipient = emailDest
+    email_subject = "Key"
+    email_body = (f"The key is attached to the file, please decrypt it with your private key:\n")
+    
+    testMessage = CreateMessageWithFile(email_sender, email_recipient, email_subject, email_body, symmetricKeyEncrypted, 'symmetricKeyEncrypted.enc')
+    
+    SendMessage(service, 'me', testMessage)
+    return

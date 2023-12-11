@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manage Requests</title>
+</head>
+<body>
+    <h1>Incoming Private Data Requests</h1>
+    <table>
+        <tr>
+            <th>Requested By</th>
+            <th>Action</th>
+        </tr>
+        {% for request in privateDataRequests %}
+        <tr>
+            <td>User {{ request.requester.username }}</td>
+            <td>
+                {% if request.status == 'waiting confirmation' %}
+                <form action="{{ url_for('update_private_data_request_status') }}" method="post">
+                    <input type="hidden" name="request_id" value="{{ request.id }}">
+                    <button type="submit" name="status" value="accepted">Accept</button>
+                    <button type="submit" name="status" value="declined">Decline</button>
+                </form>
+                {% else %}
+                    {{ request.status }}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
