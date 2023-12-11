@@ -9,6 +9,8 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 import base64
+from googleapiclient.errors import HttpError
+
 
 from googleapiclient import discovery
 import oauth2client
@@ -127,5 +129,5 @@ def SendMessage(service, user_id, message):
                .execute())
     print (f'Message Id: %s' % message['id'])
     return message
-  except errors.HttpError:
-    print (f'An error occurred: %s' % error)
+  except HttpError:
+    print (f'An error occurred: %s' % HttpError)

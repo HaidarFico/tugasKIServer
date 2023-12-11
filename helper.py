@@ -47,7 +47,7 @@ def generateIV():
 def generateSymmetricKey():
     return Random.get_random_bytes(24)
 
-def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncrypted, fileRequestId, fileDataPath, appSecretKey):
+def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncrypted, fileRequestId, fileDataPath, fileDestFolder, appSecretKey):
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
@@ -56,7 +56,7 @@ def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncr
 
     publicKeySource = decrypt_data_cbc_file(publicKeySourceEncrypted, appSecretKey)
     symmetricKeyEncrypted = encrypt_bytes(newSymmetricKey, publicKeySource)
-    fileRequestWaitingFolderDataPath = f'{os.getcwd()}/file_request_waiting/{fileRequestId}'
+    fileRequestWaitingFolderDataPath = f'{os.getcwd()}/{fileDestFolder}/{fileRequestId}'
 
     with open(fileDataPath, 'rb') as fp:
         data = fp.read()

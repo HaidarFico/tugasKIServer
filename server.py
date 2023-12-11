@@ -62,6 +62,13 @@ class FileRequest(db.Model):
     file = db.relationship('files', backref=db.backref('requests', lazy=True))
     requester = db.relationship('User', foreign_keys=[requester_id])
 
+class PrivateDataRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    requester_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(50), nullable=False, default='pending')
+    requester = db.relationship('User', foreign_keys=[requester_id])
+
 
 @api.route('/files', methods=['GET'])
 @login_required
@@ -135,9 +142,9 @@ def update_request_status():
             for row in res:
                 requesterEmail = row.email
                 requesterPublicKey = row.public_key
-                # requesterSymmetricKeyEncrypted = row.symmetric_key
 
-            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey, file_request_id, filePath, SECRET_KEY)
+            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey,
+                                         file_request_id, filePath, 'file_request_waiting', SECRET_KEY)
         return redirect(url_for('manage_requests'))
     return 'Invalid Request', 400
 
@@ -150,6 +157,96 @@ def manage_requests():
         .filter(files.user_id == current_user.id).all()
 
     return render_template('manage_request.html', requests=incoming_requests)
+
+@api.route('/list_private_data', methods=['GET'])
+@login_required
+def list_private_data():
+    # Get all users except current user
+    query = select(User).where(User.id != current_user.get_id())
+    res = db.session.execute(query).all()
+
+    userArray = []
+    for row in res:
+        userArray.append(row[0])
+
+    # Get all private data requests that the user has sent
+    query = select(PrivateDataRequest).where(PrivateDataRequest.requester_id == current_user.get_id())
+    res = db.session.execute(query).all()
+
+    privateDataRequestArray = []
+    for row in res:
+        privateDataRequestArray.append(row[0])
+
+    # Bind the private data requests to the user in a dict. 
+    # The dict has the key of the user obj and the value of the privateDataRequest
+    dataRequestsDict = {}
+    for user in userArray:
+        dataRequestsDict[user] = None
+        for privateDataRequest in privateDataRequestArray:
+            if user.id == privateDataRequest.owner_id:
+                dataRequestsDict[user] = privateDataRequest
+    
+    return render_template('request_private_data.html', dataRequestDict=dataRequestsDict)
+
+@api.route('/request_private_data', methods=['POST'])
+@login_required
+def request_private_data():
+    owner_id = request.form.get('owner_id')
+    new_request = PrivateDataRequest(
+        requester_id = current_user.get_id(),
+        owner_id = owner_id,
+        status = 'waiting confirmation'
+    )
+    db.session.add(new_request)
+    db.session.commit()
+    return redirect(url_for('list_private_data'))
+
+@api.route('/manage_private_data_requests', methods=['GET'])
+@login_required
+def manage_private_data_requests():
+    # Get all private data requests that the user has gotten
+    query = select(PrivateDataRequest).where(PrivateDataRequest.owner_id == current_user.get_id())
+    res = db.session.execute(query).all()
+
+    privateDataRequestArray = []
+    for row in res:
+        privateDataRequestArray.append(row[0])
+
+    return render_template('manage_private_data.html', privateDataRequests=privateDataRequestArray)
+
+@api.route('/update_private_data_request_status', methods=['POST'])
+@login_required
+def update_private_data_request_status():
+    request_id = request.form.get('request_id')
+    new_status = request.form.get('status')  # accepted or declined
+
+    # Update the privateDataRequest status
+    privateDataRequest = PrivateDataRequest.query.get(request_id)
+    privateDataRequest.status = new_status
+    db.session.commit()
+
+    # send the email
+    if new_status == 'accepted':
+            requestFileWaitingFilePath = f'{os.getcwd()}/private_data/{privateDataRequest.owner_id}.enc'
+            query = select(User).where(privateDataRequest.requester_id == User.id)
+            res = db.session.execute(query).first()
+            for row in res:
+                requesterEmail = row.email
+                requesterPublicKey = row.public_key
+            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), 
+                                                   requesterPublicKey, request_id, requestFileWaitingFilePath, 'private_data_request_waiting',SECRET_KEY)
+    return redirect(url_for('manage_private_data_requests'))
+
+@api.route('/download_requested_private_data', methods=['POST'])
+@login_required
+def download_requested_private_data():
+    request_id = request.form.get('request_id')
+    privateDataRequest = PrivateDataRequest.query.get(request_id)
+
+    fileDataPath = "private_data_request_waiting" + '/' + f'{privateDataRequest.owner_id}'
+
+    return send_file(fileDataPath, as_attachment=True, download_name= f'{privateDataRequest.owner_id}.enc')
+
 @api.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():
@@ -248,14 +345,10 @@ def download_requested_file():
     res = db.session.execute(query).first()
     for row in res:
         file_request = row
-    print(file_request.id)
-    # if not file_request or file_request.requester_id != current_user.id:
-    #     return 'Invalid Request', 400
 
     file_metadata = files.query.get(file_request.file_id)
     fileDataFolderPath = "file_request_waiting" + '/'
     filePathDir = fileDataFolderPath + str(file_request.id)
-    fileDataPath = "file_request" + '/' + f'{file_metadata.filename}.{file_metadata.file_extension}'
 
     return send_file(filePathDir, as_attachment=True, download_name= f'{file_metadata.filename}.{file_metadata.file_extension}.enc')
 
