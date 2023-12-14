@@ -1,5 +1,7 @@
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Hash import SHA256
+from Crypto.Signature import pkcs1_15
 import base64
 import time
 import getpass
@@ -103,4 +105,23 @@ def generate_key():
         
     # return the private key
     return {'public_key': public_key_bytes, 'private_key': private_key_bytes}    
-    
+
+def sign_data(data, private_key_str):
+    private_key_bytes = base64.b64decode(private_key_str)
+    private_key = RSA.import_key(private_key_bytes)
+    hash_obj = SHA256.new(data)
+    signer = pkcs1_15.new(private_key)
+    signature = signer.sign(hash_obj)
+    return base64.b64encode(signature).decode('utf-8')
+
+def verify_signature(data, signature, public_key_str):
+    public_key_bytes = base64.b64decode(public_key_str)
+    public_key = RSA.import_key(public_key_bytes)
+    hash_obj = SHA256.new(data)
+    signature_bytes = base64.b64decode(signature)
+    verifier = pkcs1_15.new(public_key)
+    try:
+        verifier.verify(hash_obj, signature_bytes)
+        return True
+    except (ValueError, TypeError):
+        return False

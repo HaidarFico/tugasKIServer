@@ -331,9 +331,13 @@ def postFiles():
     filesUploadSet.save(fileUploadForm.file.data, name='temp')  
     with open(tempFilePath, 'rb') as fo:
         fileData = fo.read()
+        signature = sign_data(fileData, getPrivateKey(userId= current_user.get_id()))
         encrypted_file = encrypt_data_cbc_file(fileData, generateIV(), getSymmetricKey(current_user.get_id(), db))
+        
         with open(newFilePath, 'wb') as fr:
             fr.write(encrypted_file)
+            fr.write(b'\n%%SIGNATURE%%\n')
+            fr.write(signature)
     os.remove(tempFilePath)
 
     return redirect('/dashboard')
@@ -345,7 +349,7 @@ def download_requested_file():
     res = db.session.execute(query).first()
     for row in res:
         file_request = row
-
+        
     file_metadata = files.query.get(file_request.file_id)
     fileDataFolderPath = "file_request_waiting" + '/'
     filePathDir = fileDataFolderPath + str(file_request.id)
@@ -360,6 +364,7 @@ def downloadFile():
 
     query = select(files).where(files.user_id == current_user.get_id()).where(files.filename == fileName)
     res = db.session.execute(query).first()
+    
     for row in res:
         filesMetadata['filename'] = row.filename 
         filesMetadata['file_extension'] = row.file_extension 
@@ -369,8 +374,14 @@ def downloadFile():
         filePathDir = fileDataFolderPath + f'{filesMetadata["id"]}'
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
-            decryptFile = decrypt_data_cbc_file(encryptFile, getSymmetricKey(current_user.get_id(), db))
-            return send_file(io.BytesIO(decryptFile), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
+            file_data, _, signature = encryptFile.rpartition(b'\n%%SIGNATURE%%\n')
+            public_key_str = getPublicKey(current_user.get_id(), db)
+            decryptFile = decrypt_data_cbc_file(file_data, getSymmetricKey(current_user.get_id(), db))
+            is_valid_signature = verify_signature(decryptFile, signature, public_key_str)
+            if not is_valid_signature:
+                return "Signature verification failed", 400
+            decrypted_with_signature = decryptFile + b'\n%%SIGNATURE%%\n' + signature
+            return send_file(io.BytesIO(decrypted_with_signature), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
     return redirect('/manage_requests')
     
 @api.route('/privateKeyPage', methods=['GET'])
@@ -398,7 +409,14 @@ def getSymmetricKey(userId, db):
 
     privateKey = getPrivateKey(userId, db)
     return decrypt_bytes(symmetric_key, privateKey)
+def getPublicKey(userId, db):
+    query = select(User).where(User.id == userId)
+    res = db.session.execute(query).first()
 
+    for row in res:
+        publicKeyEncrypted = row.public_key
+
+    return publicKeyEncrypted 
 def getPrivateKey(userId, db):
     query = select(User).where(User.id == userId)
     res = db.session.execute(query).first()
