@@ -33,7 +33,7 @@ def load_user(user_id):
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), nullable=False, unique=True)
-    password = db.Column(db.String(80), nullable=False)
+    password = db.Column(db.LargeBinary(3000), nullable=False)
     email = db.Column(db.String(100))
     public_key = db.Column(db.LargeBinary(3000), nullable=False)
     private_key = db.Column(db.LargeBinary(3000), nullable=False)
@@ -316,6 +316,7 @@ def postFiles():
         os.mkdir(fileDataPath)
     
     fileName = getFileName(fileUploadForm.file.data.filename)
+    print("filename "+ fileName)
     extension = getFileExtension(fileUploadForm.file.data.filename)
     new_file = files(user_id = current_user.get_id(), filename = fileName, file_extension = extension)
     db.session.add(new_file)
@@ -331,13 +332,12 @@ def postFiles():
     filesUploadSet.save(fileUploadForm.file.data, name='temp')  
     with open(tempFilePath, 'rb') as fo:
         fileData = fo.read()
-        signature = sign_data(fileData, getPrivateKey(userId= current_user.get_id()))
+        private_key_owner = getPrivateKey(userId= current_user.get_id(),db = db)
+        signature = sign_data(fileData, private_key_str= private_key_owner)
         encrypted_file = encrypt_data_cbc_file(fileData, generateIV(), getSymmetricKey(current_user.get_id(), db))
-        
+        signatured_encrypted_file = encrypted_file  + b'\n%%SIGNATURE%%\n' + signature
         with open(newFilePath, 'wb') as fr:
-            fr.write(encrypted_file)
-            fr.write(b'\n%%SIGNATURE%%\n')
-            fr.write(signature)
+            fr.write(signatured_encrypted_file)
     os.remove(tempFilePath)
 
     return redirect('/dashboard')
@@ -412,7 +412,6 @@ def getSymmetricKey(userId, db):
 def getPublicKey(userId, db):
     query = select(User).where(User.id == userId)
     res = db.session.execute(query).first()
-
     for row in res:
         publicKeyEncrypted = row.public_key
 
