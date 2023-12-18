@@ -332,12 +332,9 @@ def postFiles():
     filesUploadSet.save(fileUploadForm.file.data, name='temp')  
     with open(tempFilePath, 'rb') as fo:
         fileData = fo.read()
-        private_key_owner = getPrivateKey(userId= current_user.get_id(),db = db)
-        signature = sign_data(fileData, private_key_str= private_key_owner)
         encrypted_file = encrypt_data_cbc_file(fileData, generateIV(), getSymmetricKey(current_user.get_id(), db))
-        signatured_encrypted_file = encrypted_file  + b'\n%%SIGNATURE%%\n' + signature
         with open(newFilePath, 'wb') as fr:
-            fr.write(signatured_encrypted_file)
+            fr.write(encrypted_file)
     os.remove(tempFilePath)
 
     return redirect('/dashboard')
@@ -374,14 +371,8 @@ def downloadFile():
         filePathDir = fileDataFolderPath + f'{filesMetadata["id"]}'
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
-            file_data, _, signature = encryptFile.rpartition(b'\n%%SIGNATURE%%\n')
-            public_key_str = getPublicKey(current_user.get_id(), db)
-            decryptFile = decrypt_data_cbc_file(file_data, getSymmetricKey(current_user.get_id(), db))
-            is_valid_signature = verify_signature(decryptFile, signature, public_key_str)
-            if not is_valid_signature:
-                return "Signature verification failed", 400
-            decrypted_with_signature = decryptFile + b'\n%%SIGNATURE%%\n' + signature
-            return send_file(io.BytesIO(decrypted_with_signature), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
+            decryptFile = decrypt_data_cbc_file(encryptFile, getSymmetricKey(current_user.get_id(), db))
+            return send_file(io.BytesIO(decryptFile), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
     return redirect('/manage_requests')
     
 @api.route('/privateKeyPage', methods=['GET'])
