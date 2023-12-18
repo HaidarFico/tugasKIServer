@@ -113,8 +113,8 @@ def sign_data(data, private_key_str):
     signature = signer.sign(hash_obj)
     return base64.b64encode(signature)
 
-def verify_signature(data, signature, public_key_str):
-    public_key = RSA.import_key(public_key_str)
+def verify_signature(data, signature, public_key_bytes):
+    public_key = RSA.import_key(public_key_bytes)
     hash_obj = SHA256.new(data)
     signature_bytes = base64.b64decode(signature)
     verifier = pkcs1_15.new(public_key)

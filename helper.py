@@ -47,7 +47,7 @@ def generateIV():
 def generateSymmetricKey():
     return Random.get_random_bytes(24)
 
-def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncrypted, fileRequestId, fileDataPath, fileDestFolder, appSecretKey):
+def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncrypted, ownerPublicKey, fileRequestId, fileDataPath, fileDestFolder, appSecretKey):
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
@@ -60,8 +60,19 @@ def SendRequestAffirmationEmail(emailDest, symmetricKeyUser, publicKeySourceEncr
 
     with open(fileDataPath, 'rb') as fp:
         data = fp.read()
-        dataDecrypted = decrypt_data_cbc_file(data, symmetricKeyUser)   
-        dataEncrypted = encrypt_data_cbc_file(dataDecrypted, generateIV(), newSymmetricKey)
+        file_data, _, signatureAndId = data.rpartition(b'\n%%SIGNATURE%%\n')
+        if len(file_data) == 0:
+            dataDecrypted = decrypt_data_cbc_file(data, symmetricKeyUser)   
+            dataEncrypted = encrypt_data_cbc_file(dataDecrypted, generateIV(), newSymmetricKey)
+        else:
+            signature, _, id = signatureAndId.rpartition(b'\n%%ID%%\n')
+            decryptFile = decrypt_data_cbc_file(file_data, symmetricKeyUser)
+            is_valid_signature = verify_signature(decryptFile, signature, ownerPublicKey)
+            if not is_valid_signature:
+                return "Signature verification failed", 400
+            decrypted_with_signature = decryptFile + b'\n%%SIGNATURE%%\n' + signature + b'\n%%ID%%\n' + id
+            dataEncrypted = encrypt_data_cbc_file(decrypted_with_signature, generateIV(), newSymmetricKey)
+
         with open(fileRequestWaitingFolderDataPath, 'wb') as wp:
             wp.write(dataEncrypted)
 
