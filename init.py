@@ -44,8 +44,7 @@ def flaskInit():
     TEMP_FILE_FILE_PATH = os.getcwd() + '/' + TEMP_FILE_FOLDER_NAME
     FILE_DATA_FILE_PATH = os.getcwd() + '/' + FILE_DATA_FOLDER_NAME
     FILE_REQUEST_FILE_PATH = os.getcwd() + '/' + 'file_request_waiting'
-    PRIVATE_DATA_REQUEST_FILE_PATH = os.getcwd + '/' + 'private_data_request_waiting'
-
+    PRIVATE_DATA_REQUEST_FILE_PATH = os.path.join(os.getcwd(), 'private_data_request_waiting')
     if (not os.path.isdir(PRIVATE_DATA_FILE_PATH)):
         os.mkdir(PRIVATE_DATA_FILE_PATH)
     if (not os.path.isdir(TEMP_FILE_FILE_PATH)):

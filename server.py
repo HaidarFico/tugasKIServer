@@ -33,7 +33,7 @@ def load_user(user_id):
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), nullable=False, unique=True)
-    password = db.Column(db.String(80), nullable=False)
+    password = db.Column(db.LargeBinary(3000), nullable=False)
     email = db.Column(db.String(100))
     public_key = db.Column(db.LargeBinary(3000), nullable=False)
     private_key = db.Column(db.LargeBinary(3000), nullable=False)
@@ -143,7 +143,12 @@ def update_request_status():
                 requesterEmail = row.email
                 requesterPublicKey = row.public_key
 
-            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey,
+            query = select(User).where(file_request.owner_id == User.id)
+            res = db.session.execute(query).first()
+            for row in res:
+                ownerId = row.id
+            ownerPublicKey = getPublicKey(ownerId, db)
+            SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), requesterPublicKey, ownerPublicKey,
                                          file_request_id, filePath, 'file_request_waiting', SECRET_KEY)
         return redirect(url_for('manage_requests'))
     return 'Invalid Request', 400
@@ -316,6 +321,7 @@ def postFiles():
         os.mkdir(fileDataPath)
     
     fileName = getFileName(fileUploadForm.file.data.filename)
+    print("filename "+ fileName)
     extension = getFileExtension(fileUploadForm.file.data.filename)
     new_file = files(user_id = current_user.get_id(), filename = fileName, file_extension = extension)
     db.session.add(new_file)
@@ -338,6 +344,57 @@ def postFiles():
 
     return redirect('/dashboard')
 
+@api.route('/postFilesPdf', methods=['POST'])
+def postFilesPdf():
+    fileUploadForm = FileUploadForm()
+    fileDataPath = FILE_DATA_FILE_PATH + '/'
+    tempFilePath = TEMP_FILE_FILE_PATH + '/temp'
+
+    if not os.path.exists(fileDataPath):
+        os.mkdir(fileDataPath)
+    
+    fileName = getFileName(fileUploadForm.file.data.filename)
+    print("filename "+ fileName)
+    extension = getFileExtension(fileUploadForm.file.data.filename)
+    new_file = files(user_id = current_user.get_id(), filename = fileName, file_extension = extension)
+    db.session.add(new_file)
+    db.session.commit()
+    query = select(Column('id')).where(files.user_id == current_user.get_id()).where(files.filename == fileName)
+    res = db.session.execute(query)
+    fileId = None
+    for resIndividu in res.scalars():
+        fileId = resIndividu
+
+    newFilePath = fileDataPath + "{}".format(fileId)
+
+    filesUploadSet.save(fileUploadForm.file.data, name='temp')  
+    with open(tempFilePath, 'rb') as fo:
+        fileData = fo.read()
+        private_key_owner = getPrivateKey(userId= current_user.get_id(),db = db)
+        signature = sign_data(fileData, private_key_str= private_key_owner)
+        encrypted_file = encrypt_data_cbc_file(fileData, generateIV(), getSymmetricKey(current_user.get_id(), db))
+        signatured_encrypted_file = encrypted_file  + b'\n%%SIGNATURE%%\n' + signature + b'\n%%ID%%\n' + current_user.get_id().encode()
+        with open(newFilePath, 'wb') as fr:
+            fr.write(signatured_encrypted_file)
+    os.remove(tempFilePath)
+
+    return redirect('/dashboard')
+
+@api.route('/checkPdfFile', methods=['POST'])
+def checkPdfFile():
+    fileUploadForm = FileUploadForm()
+
+    file_data, _, signatureAndId = fileUploadForm.file.data.read().rpartition(b'\n%%SIGNATURE%%\n')
+    if len(file_data) == 0:
+        return render_template('not_valid.html')
+    signature, _, id = signatureAndId.rpartition(b'\n%%ID%%\n')
+    public_key = getPublicKey(id.decode(), db)
+    is_valid_signature = verify_signature(file_data, signature, public_key)
+    if not is_valid_signature:
+        return redirect('/not_valid')
+
+    return render_template('valid.html')
+
 @api.route('/download_requested_file', methods=['POST'])
 def download_requested_file():
     file_id = request.form.get('file_id')
@@ -345,7 +402,7 @@ def download_requested_file():
     res = db.session.execute(query).first()
     for row in res:
         file_request = row
-
+        
     file_metadata = files.query.get(file_request.file_id)
     fileDataFolderPath = "file_request_waiting" + '/'
     filePathDir = fileDataFolderPath + str(file_request.id)
@@ -360,6 +417,7 @@ def downloadFile():
 
     query = select(files).where(files.user_id == current_user.get_id()).where(files.filename == fileName)
     res = db.session.execute(query).first()
+    
     for row in res:
         filesMetadata['filename'] = row.filename 
         filesMetadata['file_extension'] = row.file_extension 
@@ -369,6 +427,16 @@ def downloadFile():
         filePathDir = fileDataFolderPath + f'{filesMetadata["id"]}'
         with open(filePathDir, "rb") as fo:
             encryptFile = fo.read()
+            file_data, _, signatureAndId = encryptFile.rpartition(b'\n%%SIGNATURE%%\n')
+            if len(file_data) != 0:
+                signature, _ , id = signatureAndId.rpartition(b'\n%%ID%%\n')
+                public_key_str = getPublicKey(current_user.get_id(), db)
+                decryptFile = decrypt_data_cbc_file(file_data, getSymmetricKey(current_user.get_id(), db))
+                is_valid_signature = verify_signature(decryptFile, signature, public_key_str)
+                if not is_valid_signature:
+                    return "Signature verification failed", 400
+                decrypted_with_signature = decryptFile + b'\n%%SIGNATURE%%\n' + signature + b'\n%%ID%%\n' + id 
+                return send_file(io.BytesIO(decrypted_with_signature), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
             decryptFile = decrypt_data_cbc_file(encryptFile, getSymmetricKey(current_user.get_id(), db))
             return send_file(io.BytesIO(decryptFile), as_attachment=True, download_name=f'{filesMetadata["filename"]}.{filesMetadata["file_extension"]}')
     return redirect('/manage_requests')
@@ -398,7 +466,15 @@ def getSymmetricKey(userId, db):
 
     privateKey = getPrivateKey(userId, db)
     return decrypt_bytes(symmetric_key, privateKey)
+def getPublicKey(userId, db):
+    query = select(User).where(User.id == userId)
+    res = db.session.execute(query).first()
+    for row in res:
+        publicKeyEncrypted = row.public_key
 
+    publicKey = decrypt_data_cbc_file(publicKeyEncrypted, SECRET_KEY)
+    return publicKey 
+    
 def getPrivateKey(userId, db):
     query = select(User).where(User.id == userId)
     res = db.session.execute(query).first()
