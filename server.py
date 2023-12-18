@@ -239,7 +239,7 @@ def update_private_data_request_status():
                 requesterEmail = row.email
                 requesterPublicKey = row.public_key
             SendRequestAffirmationEmail(requesterEmail, getSymmetricKey(current_user.get_id(), db), 
-                                                   requesterPublicKey, request_id, requestFileWaitingFilePath, 'private_data_request_waiting',SECRET_KEY)
+                                                   requesterPublicKey, None,request_id, requestFileWaitingFilePath, 'private_data_request_waiting',SECRET_KEY)
     return redirect(url_for('manage_private_data_requests'))
 
 @api.route('/download_requested_private_data', methods=['POST'])
@@ -248,7 +248,7 @@ def download_requested_private_data():
     request_id = request.form.get('request_id')
     privateDataRequest = PrivateDataRequest.query.get(request_id)
 
-    fileDataPath = "private_data_request_waiting" + '/' + f'{privateDataRequest.owner_id}'
+    fileDataPath = "private_data_request_waiting" + '/' + f'{request_id}'
 
     return send_file(fileDataPath, as_attachment=True, download_name= f'{privateDataRequest.owner_id}.enc')
 
